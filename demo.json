@@ -1,0 +1,10 @@
+{
+  "text": "In a 3-0 victory over the Crew on Saturday in Columbus , Ohio , goalkeeper Zach Wells stopped Kyle Martino 's penalty kick , only the third unsuccessful penalty in 20 attempts in M.L.S . this season .",
+  "triple_list": [
+    [
+      "Ohio",
+      "/location/location/contains",
+      "Columbus"
+    ]
+  ]
+}
