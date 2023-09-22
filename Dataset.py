@@ -1,12 +1,4 @@
 # -*- encoding: utf-8 -*-
-'''
-@File    :   Dataset.py
-@Time    :   2022/08/29 19:04:04
-@Author  :   lujun
-@Version :   1.0
-@License :   (C)Copyright 2021-2022, Liugroup-NLPR-CASIA
-@Desc    :   TDeer 模型的Dataset
-'''
 
 import os
 import torch
