@@ -8,8 +8,8 @@ from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 from torch.utils.data import DataLoader
 
-from Dataset import TDEERDataset, collate_fn, collate_fn_val
-from Model import TDEERPytochLighting
+from dataset import TDEERDataset, collate_fn, collate_fn_val
+from model import TDEERPytochLighting
 from utils.Callback import EMACallBack
 from utils.utils import update_arguments
 
