@@ -1,0 +1,21 @@
+model_params:
+  model_name: tdeer
+
+  # specify max sample triples
+  max_sample_triples: 15
+
+  # specify negative sample num
+  neg_samples: 3
+
+  loss_weight:
+    - 2
+    - 2
+    - 2
+    - 2
+  # 是否使用R-drop训练策略
+  is_rdrop: true
+  # 是否使用bert所有hidden states融合策略
+  hidden_fuse: false
+  # 融合倒数后几层的hidden states,最多12层
+  hidden_fuse_layers: [8]
+  avg_pool: true

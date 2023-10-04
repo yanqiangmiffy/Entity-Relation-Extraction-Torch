@@ -1,14 +1,19 @@
 # -*- encoding: utf-8 -*-
-
-import os
-import torch
-import json
+import argparse
 import copy
-import numpy as np
-from utils.utils import find_head_idx
+import json
+import os
 from collections import defaultdict
-from torch.utils.data import DataLoader, Dataset
+
+import loguru
+import numpy as np
+import torch
+import yaml
+from torch.utils.data import Dataset
+from tqdm import tqdm
 from transformers.models.bert.tokenization_bert_fast import BertTokenizerFast
+
+from utils.utils import find_head_idx, update_arguments
 
 
 class TDEERDataset(Dataset):
@@ -26,14 +31,19 @@ class TDEERDataset(Dataset):
         self.max_sample_triples = args.max_sample_triples
         self.datas = []
         if is_training:
+            loguru.logger.info("stage for training dataset")
             filenames = os.path.join(args.data_dir, "train_triples.json")
         else:
+            loguru.logger.info("stage for dev/test dataset")
             filenames = os.path.join(args.data_dir, "dev_triples.json")
         with open(filenames, 'r') as f:
             lines = json.load(f)
+            loguru.logger.info(f"dataset size is {len(lines)}")
         if self.is_training:
+            loguru.logger.info("preprocess for training dataset")
             self.preprocess(lines)
         else:
+            loguru.logger.info("preprocess for dev/test dataset")
             self.proprecss_val(lines)
 
     def proprecss_val(self, datas):
@@ -47,7 +57,7 @@ class TDEERDataset(Dataset):
             text_masks = self.get_text_mask(attention_masks)
             token_type_ids = text_tokened['token_type_ids']
             offset_mapping = text_tokened['offset_mapping']
-            triples_index_set = set()   # (sub head, sub tail, obj head, obj tail, rel)
+            triples_index_set = set()  # (sub head, sub tail, obj head, obj tail, rel)
             triples_set = set()
             for triple in data['triple_list']:
                 subj, rel, obj = triple
@@ -59,7 +69,7 @@ class TDEERDataset(Dataset):
                 subj_head_idx = find_head_idx(input_ids, subj_tokened[1:-1], 0)
                 subj_tail_idx = subj_head_idx + len(subj_tokened[1:-1]) - 1
                 obj_head_idx = find_head_idx(
-                    input_ids, obj_tokened[1:-1], subj_tail_idx+1)
+                    input_ids, obj_tokened[1:-1], subj_tail_idx + 1)
                 if obj_head_idx == -1:
                     obj_head_idx = find_head_idx(
                         input_ids, obj_tokened[1:-1], 0)
@@ -86,13 +96,16 @@ class TDEERDataset(Dataset):
             })
 
     def get_text_mask(self, attention_masks):
+        """
+        将CLS和SEP对应位置的MASK处理为0
+        """
         new_atten_mask = copy.deepcopy(attention_masks)
         new_atten_mask[0] = 0
         new_atten_mask[-1] = 0
         return new_atten_mask
 
     def preprocess(self, datas):
-        for data in datas:
+        for data in tqdm(datas):
             pos_datas = []
             neg_datas = []
             text = data['text']
@@ -105,11 +118,11 @@ class TDEERDataset(Dataset):
             offset_mapping = text_tokened['offset_mapping']
             text_length = len(input_ids)
             entity_set = set()  # (head idx, tail idx)
-            triples_set = set()   # (sub head, sub tail, obj head, obj tail, rel)
-            subj_rel_set = set()   # (sub head, sub tail, rel)
-            subj_set = set()   # (sub head, sub tail)
+            triples_set = set()  # (sub head, sub tail, obj head, obj tail, rel)
+            subj_rel_set = set()  # (sub head, sub tail, rel)
+            subj_set = set()  # (sub head, sub tail)
             rel_set = set()
-            trans_map = defaultdict(list)   # {(sub_head, rel): [tail_heads]}
+            trans_map = defaultdict(list)  # {(sub_head, rel): [tail_heads]}
             triples_sets = set()
             for triple in data['triple_list']:
                 subj, rel, obj = triple
@@ -120,7 +133,7 @@ class TDEERDataset(Dataset):
                 subj_head_idx = find_head_idx(input_ids, subj_tokened[1:-1], 0)
                 subj_tail_idx = subj_head_idx + len(subj_tokened[1:-1]) - 1
                 obj_head_idx = find_head_idx(
-                    input_ids, obj_tokened[1:-1], subj_tail_idx+1)
+                    input_ids, obj_tokened[1:-1], subj_tail_idx + 1)
                 if obj_head_idx == -1:
                     obj_head_idx = find_head_idx(
                         input_ids, obj_tokened[1:-1], 0)
@@ -137,8 +150,7 @@ class TDEERDataset(Dataset):
                      obj_head_idx, obj_tail_idx, rel_idx)
                 )
                 rel_set.add(rel_idx)
-                trans_map[(subj_head_idx, subj_tail_idx, rel_idx)
-                          ].append(obj_head_idx)
+                trans_map[(subj_head_idx, subj_tail_idx, rel_idx)].append(obj_head_idx)
 
             if not rel_set:
                 continue
@@ -333,7 +345,9 @@ def collate_fn(batches):
     batch_sample_rel = torch.from_numpy(
         np.array(batch_sample_rel, dtype=np.int64))
 
-    return [batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_entity_heads, batch_entity_tails, batch_rels, batch_sample_subj_head, batch_sample_subj_tail, batch_sample_rel, batch_sample_obj_heads, batch_triples_sets, batch_text_masks]
+    return [batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_entity_heads,
+            batch_entity_tails, batch_rels, batch_sample_subj_head, batch_sample_subj_tail, batch_sample_rel,
+            batch_sample_obj_heads, batch_triples_sets, batch_text_masks]
 
 
 def collate_fn_val(batches):
@@ -366,4 +380,34 @@ def collate_fn_val(batches):
         batch_triple_set.append(obj['triples_set'])
         batch_triples_index_set.append(obj['triples_index_set'])
 
-    return [batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_set, batch_triples_index_set, batch_text_masks]
+    return [batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_set,
+            batch_triples_index_set, batch_text_masks]
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='各个模型公共参数')
+    parser.add_argument('--model_type', default="tdeer",
+                        type=str, help='定义模型类型', choices=['tdeer'])
+    parser.add_argument('--pretrain_path', type=str,
+                        default="pretrained_models/bert-base-uncased",
+                        help='定义预训练模型路径')
+    parser.add_argument('--batch_size', default=16, type=int, help='specify the batch size')
+    parser.add_argument('--data_dir', type=str, default="data/NYT", help='定义数据集路径')
+
+    args = parser.parse_args()
+    print(args)
+    print(args.pretrain_path)
+
+    # 根据超参数文件更新参数
+    config_file = os.path.join("config", "{}.yaml".format(args.model_type))
+    with open(config_file, 'r', encoding='utf-8') as f:
+        config = yaml.load(f, Loader=yaml.Loader)
+    args = update_arguments(args, config['model_params'])
+    args.config_file = config_file
+
+    dataset = TDEERDataset(args=args, is_training=True)
+
+    print(len(dataset))
+
+    for ds in dataset:
+        print(ds)
