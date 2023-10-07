@@ -19,3 +19,4 @@ model_params:
   # 融合倒数后几层的hidden states,最多12层
   hidden_fuse_layers: [8]
   avg_pool: true
+  lstm_pool: false

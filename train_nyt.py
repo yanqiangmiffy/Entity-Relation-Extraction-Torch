@@ -444,5 +444,6 @@ for epoch in range(num_epochs):
     optimizer, scheduler = build_optimizer(args, model)
     # train_epoch(model, epoch, optimizer, scheduler)
     # torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
-    model.load_state_dict(torch.load(f"output/v1/model_epoch{epoch}.bin"))
+    model.load_state_dict(torch.load(f"output/model_epoch{epoch}.bin"))
     valid_epoch(model, epoch)
+

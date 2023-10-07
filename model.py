@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from transformers.models.bert.modeling_bert import BertSelfAttention, BertSelfOutput, BertModel, BertPreTrainedModel
 from transformers.models.bert.configuration_bert import BertConfig
+from torch.nn.utils.rnn import pack_padded_sequence
 
 
 class Linear(nn.Linear):
@@ -136,12 +137,27 @@ class RelEntityModel(nn.Module):
         # 文本编码
         bert_output = self.bert(input_ids, attention_masks, token_type_ids, output_hidden_states=True)
         last_hidden_state = bert_output[0]
+        all_hidden_size = bert_output[2]
+
+        # hidden state,last hidden state,all hidden states
+
         # last_hidden_size = self.words_dropout(last_hidden_size)
+
         if self.args.avg_pool:
             pooler_output = self.masked_avgpool(last_hidden_state, attention_masks)
+        elif self.args.lstm_pool:
+            hidden_states = torch.stack([all_hidden_size[layer_i][:, 0].squeeze()
+                                         for layer_i in range(0, 12)], dim=-1)  # noqa
+            hidden_states = hidden_states.view(-1, 12, 256)
+            out, _ = self.lstm(hidden_states, None)
+            pooler_output = self.dropout(out[:, -1, :])
+            # encoded_layers = last_hidden_state.permute(1, 0, 2)
+            # enc_hiddens, (last_hidden, last_cell) = self.lstm(pack_padded_sequence(encoded_layers, inputs[2]))
+            # output_hidden = torch.cat((last_hidden[0], last_hidden[1]), dim=1)
+            # output_hidden = F.dropout(output_hidden, 0.2)
+            # output = self.clf(output_hidden)
         else:
             pooler_output = bert_output[1]
-        all_hidden_size = bert_output[2]
 
         pred_rels = self.rels_out(pooler_output)
         # [batch,seq_len,2]
