@@ -46,7 +46,7 @@ def parser_args():
     args = parser.parse_args()
 
     # 根据超参数文件更新参数
-    config_file = os.path.join("config", "{}.yaml".format(args.model_type))
+    config_file = os.path.join("../config", "{}.yaml".format(args.model_type))
     with open(config_file, 'r', encoding='utf-8') as f:
         config = yaml.load(f, Loader=yaml.Loader)
     args = update_arguments(args, config['model_params'])

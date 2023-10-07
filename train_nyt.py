@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import yaml
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from transformers import AdamW
 from transformers import get_linear_schedule_with_warmup
@@ -18,7 +19,8 @@ from model import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
-from torch.utils.tensorboard import SummaryWriter
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 log_writer = SummaryWriter('./log')
 
 
@@ -35,6 +37,8 @@ def parser_args():
                         help='定义预训练模型路径')
     parser.add_argument('--data_dir', type=str, default="data/NYT", help='定义数据集路径')
     parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
+    parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
+    parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
     parser.add_argument('--epoch', default=20, type=int, help='specify the epoch size')
     parser.add_argument('--batch_size', default=32, type=int, help='specify the batch size')
     parser.add_argument('--output_path', default="event_extract", type=str, help='将每轮的验证结果保存的路径')
@@ -113,22 +117,26 @@ def build_optimizer(args, model):
     no_decay = ['bias', 'LayerNorm.weight']
 
     # param_optimizer = list(model.named_parameters())
+    # print(list(model.named_parameters()))
+    # layer_names = [name for name, param in model.named_parameters()]
+    # print(layer_names)
+
     optimizer_grouped_parameters = [
         # bert
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)
                     and any(en in n for en, ep in model.rel_entity_model.bert.named_parameters())],
-         'weight_decay': args.weight_decay, 'lr': args.lr},
+         'weight_decay': args.weight_decay, 'lr': args.bert_lr},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)
                     and any(en in n for en, ep in model.rel_entity_model.bert.named_parameters())],
-         'weight_decay': 0.0, 'lr': args.lr},
+         'weight_decay': 0.0, 'lr': args.bert_lr},
 
         # other
         {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)
                     and not any(en in n for en, ep in model.rel_entity_model.bert.named_parameters())],
-         'weight_decay': args.weight_decay, 'lr': args.lr},
+         'weight_decay': args.weight_decay, 'lr': args.other_lr},
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)
                     and not any(en in n for en, ep in model.rel_entity_model.bert.named_parameters())],
-         'weight_decay': 0.0, 'lr': args.lr}
+         'weight_decay': 0.0, 'lr': args.other_lr}
     ]
 
     optimizer = AdamW(optimizer_grouped_parameters, eps=args.eps)
@@ -243,6 +251,12 @@ def train_epoch(model, epoch, optimizer, scheduler):
 
 def validation_step(model, batch):
     batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_sets, batch_triples_index_set, batch_text_masks = batch
+
+    batch_tokens = batch_tokens.to(device)
+    batch_attention_masks = batch_attention_masks.to(device)
+    batch_segments = batch_segments.to(device)
+    batch_text_masks = batch_text_masks.to(device)
+
     relations_logits, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output = model.rel_entity_model(
         batch_tokens, batch_attention_masks, batch_segments)
 
@@ -320,24 +334,28 @@ def validation_step(model, batch):
                             obj = entity_map[h]
                             triple_set.add((sub, rel, obj))
         pred_triple_sets.append(triple_set)
+    # print(len(batch_texts))
+    # print(len(pred_triple_sets))
+    # print(len(batch_triple_sets))
     return batch_texts, pred_triple_sets, batch_triple_sets
 
 
-def validation_epoch_end(epoch,outputs):
+def validation_epoch_end(epoch, outputs):
     preds, targets = [], []
     texts = []
-    for text, pred, target in outputs:
-        preds.extend(pred)
-        targets.extend(target)
-        texts.extend(text)
-
+    # print(outputs[0])
+    # for text, pred, target in zip(outputs):
+    #     preds.extend(pred)
+    #     targets.extend(target)
+    #     texts.extend(text)
+    texts,preds, targets=outputs
     correct = 0
     predict = 0
     total = 0
     orders = ['subject', 'relation', 'object']
 
     # log_dir = [log.log_dir for log in self.loggers if hasattr(log, "log_dir")][0]
-    log_dir='.'
+    log_dir = '.'
     os.makedirs(os.path.join(log_dir, "output"), exist_ok=True)
     writer = open(os.path.join(log_dir, "output", 'val_output_{}.json'.format(epoch)), 'w')
     for text, pred, target in zip(*(texts, preds, targets)):
@@ -367,12 +385,12 @@ def validation_epoch_end(epoch,outputs):
     real_acc = round(correct / predict, 5) if predict != 0 else 0
     real_recall = round(correct / total, 5)
     real_f1 = round(2 * (real_recall * real_acc) / (real_recall + real_acc), 5) if (real_recall + real_acc) != 0 else 0
-    loguru.logger.info("tot", float(total), prog_bar=True)
-    loguru.logger.info("cor", float(correct), prog_bar=True)
-    loguru.logger.info("pred", float(predict), prog_bar=True)
-    loguru.logger.info("recall", float(real_recall), prog_bar=True)
-    loguru.logger.info("acc", float(real_acc), prog_bar=True)
-    loguru.logger.info("f1", float(real_f1), prog_bar=True)
+    # print("tot", float(total))
+    # print("cor", float(correct))
+    # print("pred", float(predict))
+    # print("recall", float(real_recall))
+    # print("acc", float(real_acc))
+    # print("f1", float(real_f1))
 
     only_sub_rel_cor = 0
     only_sub_rel_pred = 0
@@ -388,12 +406,12 @@ def validation_epoch_end(epoch,outputs):
     real_acc = round(only_sub_rel_cor / only_sub_rel_pred, 5) if only_sub_rel_pred != 0 else 0
     real_recall = round(only_sub_rel_cor / only_sub_rel_tot, 5)
     real_f1 = round(2 * (real_recall * real_acc) / (real_recall + real_acc), 5) if (real_recall + real_acc) != 0 else 0
-    loguru.logger.info("sr_tot", only_sub_rel_tot, prog_bar=True)
-    loguru.logger.info("sr_cor", only_sub_rel_cor, prog_bar=True)
-    loguru.logger.info("sr_pred", only_sub_rel_pred, prog_bar=True)
-    loguru.logger.info("sr_rec", real_recall, prog_bar=True)
-    loguru.logger.info("sr_acc", real_acc, prog_bar=True)
-    loguru.logger.info("sr_f1", real_f1, prog_bar=True)
+    print("tot", only_sub_rel_tot)
+    print("cor", only_sub_rel_cor)
+    print("pred", only_sub_rel_pred)
+    print("rec", real_recall)
+    print("acc", real_acc)
+    print("f1", real_f1)
 
 
 def decode_entity(text: str, mapping, start: int, end: int):
@@ -405,7 +423,26 @@ def decode_entity(text: str, mapping, start: int, end: int):
     return entity
 
 
+def valid_epoch(model, epoch):
+    model.eval()
+    loguru.logger.info(f"validing at {epoch}")
+    epoch_texts, epoch_pred_triple_sets, epoch_triple_sets = [], [], []
+    with torch.no_grad():
+        for batch in tqdm(val_dataloader,total=len(val_dataloader)):
+            batch_texts, pred_triple_sets, batch_triple_sets = validation_step(model, batch)
+            epoch_texts.extend(batch_texts)
+            epoch_pred_triple_sets.extend(pred_triple_sets)
+            epoch_triple_sets.extend(batch_triple_sets)
+        # print(len(epoch_texts))
+        # print(len(epoch_pred_triple_sets))
+        # print(len(epoch_triple_sets))
+        outputs = (epoch_texts, epoch_pred_triple_sets, epoch_triple_sets)
+        validation_epoch_end(epoch, outputs)
+
+
 for epoch in range(num_epochs):
     optimizer, scheduler = build_optimizer(args, model)
-    train_epoch(model, epoch, optimizer, scheduler)
-    torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
+    # train_epoch(model, epoch, optimizer, scheduler)
+    # torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
+    model.load_state_dict(torch.load(f"output/v1/model_epoch{epoch}.bin"))
+    valid_epoch(model, epoch)
