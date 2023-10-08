@@ -19,6 +19,7 @@ from model import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 log_writer = SummaryWriter('./log')
@@ -52,6 +53,9 @@ def parser_args():
     parser.add_argument('--rewarm_epoch_num', default=2, type=int,
                         help='CosineAnnealingWarmRestarts scheduler 相关参数')
 
+    # 阶段
+    parser.add_argument('--is_train', default=False, type=bool, help='是否训练')
+    parser.add_argument('--is_valid', default=False, type=bool, help='是否评估')
     args = parser.parse_args()
 
     # 根据超参数文件更新参数
@@ -348,7 +352,7 @@ def validation_epoch_end(epoch, outputs):
     #     preds.extend(pred)
     #     targets.extend(target)
     #     texts.extend(text)
-    texts,preds, targets=outputs
+    texts, preds, targets = outputs
     correct = 0
     predict = 0
     total = 0
@@ -428,7 +432,7 @@ def valid_epoch(model, epoch):
     loguru.logger.info(f"validing at {epoch}")
     epoch_texts, epoch_pred_triple_sets, epoch_triple_sets = [], [], []
     with torch.no_grad():
-        for batch in tqdm(val_dataloader,total=len(val_dataloader)):
+        for batch in tqdm(val_dataloader, total=len(val_dataloader)):
             batch_texts, pred_triple_sets, batch_triple_sets = validation_step(model, batch)
             epoch_texts.extend(batch_texts)
             epoch_pred_triple_sets.extend(pred_triple_sets)
@@ -442,8 +446,10 @@ def valid_epoch(model, epoch):
 
 for epoch in range(num_epochs):
     optimizer, scheduler = build_optimizer(args, model)
-    train_epoch(model, epoch, optimizer, scheduler)
-    torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
-    model.load_state_dict(torch.load(f"output/model_epoch{epoch}.bin"))
-    valid_epoch(model, epoch)
 
+    if args.is_train:
+        train_epoch(model, epoch, optimizer, scheduler)
+        torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
+    if args.is_valid:
+        model.load_state_dict(torch.load(f"output/model_epoch{epoch}.bin"))
+        valid_epoch(model, epoch)
