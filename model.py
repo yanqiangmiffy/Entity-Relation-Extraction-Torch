@@ -1,6 +1,8 @@
 import os
 import json
 import math
+
+import loguru
 import torch
 import numpy as np
 import torch.nn as nn
@@ -125,8 +127,8 @@ class RelEntityModel(nn.Module):
         self.bert = BertModel.from_pretrained(pretrain_path, cache_dir="./bertbaseuncased")
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
-        self.rels_out = nn.Linear(hidden_size, relation_size)  # 关系预测
-
+        self.rels_out = nn.Linear(hidden_size*2, relation_size)  # 关系预测
+        self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
     def masked_avgpool(self, sent, mask):
         mask_ = mask.masked_fill(mask == 0, -1e9).float()
         score = torch.softmax(mask_, -1)
@@ -142,20 +144,21 @@ class RelEntityModel(nn.Module):
         # hidden state,last hidden state,all hidden states
 
         # last_hidden_size = self.words_dropout(last_hidden_size)
-
+        # print(last_hidden_state.size())
+        # print(self.args.avg_pool)
+        # print(self.args.lstm_pool)
         if self.args.avg_pool:
             pooler_output = self.masked_avgpool(last_hidden_state, attention_masks)
         elif self.args.lstm_pool:
-            hidden_states = torch.stack([all_hidden_size[layer_i][:, 0].squeeze()
-                                         for layer_i in range(0, 12)], dim=-1)  # noqa
-            hidden_states = hidden_states.view(-1, 12, 256)
-            out, _ = self.lstm(hidden_states, None)
-            pooler_output = self.dropout(out[:, -1, :])
-            # encoded_layers = last_hidden_state.permute(1, 0, 2)
-            # enc_hiddens, (last_hidden, last_cell) = self.lstm(pack_padded_sequence(encoded_layers, inputs[2]))
-            # output_hidden = torch.cat((last_hidden[0], last_hidden[1]), dim=1)
-            # output_hidden = F.dropout(output_hidden, 0.2)
-            # output = self.clf(output_hidden)
+            output, (hidden_last, cn)  = self.birnn(last_hidden_state)
+            hidden_last_L = hidden_last[-2]
+            # print(hidden_last_L.shape)  #[32, 384]
+            # 反向最后一层，最后一个时刻
+            hidden_last_R = hidden_last[-1]
+            # print(hidden_last_R.shape)   #[32, 384]
+            # 进行拼接
+            pooler_output = torch.cat([hidden_last_L, hidden_last_R], dim=-1)
+            # loguru.logger.info(pooler_output.size)
         else:
             pooler_output = bert_output[1]
 
