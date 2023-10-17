@@ -54,8 +54,8 @@ def parser_args():
                         help='CosineAnnealingWarmRestarts scheduler 相关参数')
 
     # 阶段
-    parser.add_argument('--is_train', default=False, type=bool, help='是否训练')
-    parser.add_argument('--is_valid', default=False, type=bool, help='是否评估')
+    parser.add_argument('--is_train', default=True, type=bool, help='是否训练')
+    parser.add_argument('--is_valid', default=True, type=bool, help='是否评估')
     args = parser.parse_args()
 
     # 根据超参数文件更新参数
@@ -443,7 +443,7 @@ def valid_epoch(model, epoch):
         outputs = (epoch_texts, epoch_pred_triple_sets, epoch_triple_sets)
         validation_epoch_end(epoch, outputs)
 
-
+print(args.is_train)
 for epoch in range(num_epochs):
     optimizer, scheduler = build_optimizer(args, model)
 
@@ -453,3 +453,4 @@ for epoch in range(num_epochs):
     if args.is_valid:
         model.load_state_dict(torch.load(f"output/model_epoch{epoch}.bin"))
         valid_epoch(model, epoch)
+
