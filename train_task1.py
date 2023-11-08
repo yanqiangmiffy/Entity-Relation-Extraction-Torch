@@ -172,6 +172,40 @@ def compute_kl_loss(p, q, pad_mask=None):
     return loss
 
 
+rel_label_map = {
+    'ORG': {
+        "0": "/business/company/advisors",
+        "1": "/business/company/founders",
+        "2": "/business/company/industry",
+        "3": "/business/company/major_shareholders",
+        "4": "/business/company/place_founded",
+        "22": "/sports/sports_team/location",
+    },
+    'PER': {
+        "5": "/business/company_shareholder/major_shareholder_of",
+        "6": "/business/person/company",
+        "12": "/people/deceased_person/place_of_death",
+        "13": "/people/ethnicity/geographic_distribution",
+        "14": "/people/ethnicity/people",
+        "15": "/people/person/children",
+        "16": "/people/person/ethnicity",#
+        "17": "/people/person/nationality",
+        "18": "/people/person/place_lived",
+        "19": "/people/person/place_of_birth",
+        "20": "/people/person/profession",
+        "21": "/people/person/religion",
+    },
+    'LOC': {
+        "7": "/location/administrative_division/country",
+        "8": "/location/country/administrative_divisions",
+        "9": "/location/country/capital",
+        "10": "/location/location/contains",
+        "11": "/location/neighborhood/neighborhood_of",
+        "23": "/sports/sports_team_location/teams"
+    }
+
+}
+
 def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_loss):
     batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_entity_heads, batch_entity_tails, batch_rels, \
         batch_sample_subj_head, batch_sample_subj_tail, batch_sample_rel, batch_sample_obj_heads, batch_triple_sets, batch_text_masks = batch
@@ -191,10 +225,14 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
     output = model(batch_tokens, batch_attention_masks, batch_segments,
                    relation=batch_sample_rel, sub_head=batch_sample_subj_head, sub_tail=batch_sample_subj_tail)
 
-    pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size = output
-
+    pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,entity_types = output
+    batch_rels=torch.zeros(pred_rels)
     loss = 0
-    rel_loss = rel_loss(pred_rels, batch_rels)
+    # rel_loss = rel_loss(pred_rels, batch_rels)
+    rel_loss=0
+    for pred_rel in pred_rels:
+        batch_rels=torch.mask(entity_types,1)
+        rel_loss+= rel_loss(pred_rel, batch_rels)
     rel_loss += focal_loss(pred_rels, batch_rels)
     loss += loss_weight[0] * rel_loss
 

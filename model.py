@@ -118,15 +118,59 @@ class SpatialDropout(nn.Module):
         return output
 
 
+
+def get_entity(model, batch,device,args):
+    batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_sets, batch_triples_index_set, batch_text_masks = batch
+
+    batch_tokens = batch_tokens.to(device)
+    batch_attention_masks = batch_attention_masks.to(device)
+    batch_segments = batch_segments.to(device)
+    batch_text_masks = batch_text_masks.to(device)
+
+    relations_logits, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output = model.rel_entity_model(
+        batch_tokens, batch_attention_masks, batch_segments)
+
+    entity_heads_logits = torch.sigmoid(entity_heads_logits)
+    entity_tails_logits = torch.sigmoid(entity_tails_logits)
+
+    relations_logits = torch.sigmoid(relations_logits)
+    batch_size = entity_heads_logits.shape[0]
+    entity_heads_logits = entity_heads_logits.cpu().numpy()
+    entity_tails_logits = entity_tails_logits.cpu().numpy()
+    relations_logits = relations_logits.cpu().numpy()
+    batch_text_masks = batch_text_masks.cpu().numpy()
+
+    pred_triple_sets = []
+    for index in range(batch_size):
+        mapping = rematch(batch_offsets[index])
+        text = batch_texts[index]
+        text_attention_mask = batch_text_masks[index].reshape(-1, 1)
+        entity_heads_logit = entity_heads_logits[index] * text_attention_mask
+        entity_tails_logit = entity_tails_logits[index] * text_attention_mask
+
+        entity_heads, entity_tails = np.where(
+            entity_heads_logit > args.threshold), np.where(entity_tails_logit > args.threshold)
+        subjects = []
+        for head, head_type in zip(*entity_heads):
+            for tail, tail_type in zip(*entity_tails):
+                if head <= tail and head_type == tail_type:
+                    if head >= len(mapping) or tail >= len(mapping):
+                        break
+                    subjects.append((head,tail))
+                    break
+        return subjects
+
 class RelEntityModel(nn.Module):
     def __init__(self, args, hidden_size) -> None:
         super().__init__()
         self.args = args
         pretrain_path = args.pretrain_path
         relation_size = args.relation_number
+        entity_size = args.entity_number
         self.bert = BertModel.from_pretrained(pretrain_path, cache_dir="./bertbaseuncased")
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
+        self.entities_out = nn.Linear(hidden_size*2, entity_size)  # 关系预测
         self.rels_out = nn.Linear(hidden_size*2, relation_size)  # 关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
     def masked_avgpool(self, sent, mask):
@@ -162,7 +206,19 @@ class RelEntityModel(nn.Module):
         else:
             pooler_output = bert_output[1]
 
-        pred_rels = self.rels_out(pooler_output)
+        entity_types = self.entities_out(pooler_output)
+        pred_rels=[]
+        for entity in get_entity():
+            head,tail=entity
+            head_token_enmbedding=last_hidden_state[head+1]
+            tail_token_enmbedding=last_hidden_state[tail+1]
+            entity_emb=(head_token_enmbedding+tail_token_enmbedding)/2
+
+            entity_emb=torch.concat([entity_emb,pooler_output],axis=0)
+            pred_rel = self.rels_out(pooler_output)
+            pred_rels.append(pred_rel)
+        pred_rels=torch.concat(pred_rels,axis=0)
+        # pred_rels = self.rels_out(pooler_output)
         # [batch,seq_len,2]
         pred_entity_heads = self.entity_heads_out(last_hidden_state)
         # [batch,seq_len,2]
@@ -185,7 +241,7 @@ class RelEntityModel(nn.Module):
             # last_hidden_state = self.hidden_weight(all_hidden_states).squeeze(-1)
             last_hidden_state = all_hidden_states
 
-        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output
+        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,entity_types
 
 
 class ObjModel(nn.Module):
