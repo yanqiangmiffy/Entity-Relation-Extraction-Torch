@@ -156,8 +156,13 @@ class TDEERDataset(Dataset):
                 continue
 
             # 当前句子中的所有subjects和objects
+            # 0表示subject，1表示object
+            # entity_set.add((subj_head_idx, subj_tail_idx, 0))
+            # entity_set.add((obj_head_idx, obj_tail_idx, 1))
+
             entity_heads = np.zeros((text_length, 2))
             entity_tails = np.zeros((text_length, 2))
+
             for (head, tail, _type) in entity_set:
                 entity_heads[head][_type] = 1
                 entity_tails[tail][_type] = 1
@@ -411,3 +416,4 @@ if __name__ == '__main__':
 
     for ds in dataset:
         print(ds)
+        break
