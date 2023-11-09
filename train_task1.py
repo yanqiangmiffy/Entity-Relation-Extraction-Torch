@@ -179,6 +179,7 @@ rel_label_map = {
         "2": "/business/company/industry",
         "3": "/business/company/major_shareholders",
         "4": "/business/company/place_founded",
+        "16": "/people/person/ethnicity",  #
         "22": "/sports/sports_team/location",
     },
     'PER': {
@@ -188,7 +189,6 @@ rel_label_map = {
         "13": "/people/ethnicity/geographic_distribution",
         "14": "/people/ethnicity/people",
         "15": "/people/person/children",
-        "16": "/people/person/ethnicity",#
         "17": "/people/person/nationality",
         "18": "/people/person/place_lived",
         "19": "/people/person/place_of_birth",
