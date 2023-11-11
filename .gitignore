@@ -2,3 +2,6 @@
 .idea
 pretrained_models
 log
+output
+.pytest_cache
+*/.pytest_cache

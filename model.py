@@ -1,19 +1,15 @@
-import os
-import json
 import math
 
-import loguru
-import torch
 import numpy as np
+import torch
 import torch.nn as nn
-# import pytorch_lightning as pl
-from utils.utils import rematch
-# from utils.Callback import FGM
-import torch.nn.functional as F
-from utils.loss_func import MLFocalLoss, BCEFocalLoss
-from transformers.models.bert.modeling_bert import BertSelfAttention, BertSelfOutput, BertModel, BertPreTrainedModel
 from transformers.models.bert.configuration_bert import BertConfig
-from torch.nn.utils.rnn import pack_padded_sequence
+# from utils.Callback import FGM
+from transformers.models.bert.modeling_bert import BertSelfOutput, BertModel
+from utils.utils import rematch
+
+
+# import pytorch_lightning as pl
 
 
 class Linear(nn.Linear):
@@ -86,7 +82,7 @@ class ConditionalLayerNorm(nn.Module):
         variance = torch.mean(outputs ** 2, dim=-1, keepdim=True)
         std = torch.sqrt(variance + self.eps)  # (b, s, 1)
         outputs = outputs / std  # (b, s, h)
-        outputs = outputs*weight + bias
+        outputs = outputs * weight + bias
         return outputs
 
 
@@ -118,33 +114,19 @@ class SpatialDropout(nn.Module):
         return output
 
 
-
-def get_entity(model, batch,device,args):
-    batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_sets, batch_triples_index_set, batch_text_masks = batch
-
-    batch_tokens = batch_tokens.to(device)
-    batch_attention_masks = batch_attention_masks.to(device)
-    batch_segments = batch_segments.to(device)
-    batch_text_masks = batch_text_masks.to(device)
-
-    relations_logits, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output = model.rel_entity_model(
-        batch_tokens, batch_attention_masks, batch_segments)
-
+def get_entity(args, entity_heads_logits, entity_tails_logits, attention_masks,batch_offsets):
     entity_heads_logits = torch.sigmoid(entity_heads_logits)
     entity_tails_logits = torch.sigmoid(entity_tails_logits)
 
-    relations_logits = torch.sigmoid(relations_logits)
-    batch_size = entity_heads_logits.shape[0]
-    entity_heads_logits = entity_heads_logits.cpu().numpy()
-    entity_tails_logits = entity_tails_logits.cpu().numpy()
-    relations_logits = relations_logits.cpu().numpy()
-    batch_text_masks = batch_text_masks.cpu().numpy()
+    entity_heads_logits = entity_heads_logits.detach().cpu().numpy()
+    entity_tails_logits = entity_tails_logits.detach().cpu().numpy()
+    attention_masks = attention_masks.cpu().numpy()
 
+    batch_size = entity_heads_logits.shape[0]
     pred_triple_sets = []
     for index in range(batch_size):
         mapping = rematch(batch_offsets[index])
-        text = batch_texts[index]
-        text_attention_mask = batch_text_masks[index].reshape(-1, 1)
+        text_attention_mask = attention_masks[index].reshape(-1, 1)
         entity_heads_logit = entity_heads_logits[index] * text_attention_mask
         entity_tails_logit = entity_tails_logits[index] * text_attention_mask
 
@@ -153,12 +135,18 @@ def get_entity(model, batch,device,args):
         subjects = []
         for head, head_type in zip(*entity_heads):
             for tail, tail_type in zip(*entity_tails):
+
+                if head >= len(mapping) or tail >= len(mapping):
+                    break
+
                 if head <= tail and head_type == tail_type:
-                    if head >= len(mapping) or tail >= len(mapping):
-                        break
-                    subjects.append((head,tail))
+                    if head_type == 0:
+                        subjects.append((head, tail))
+                    else:
+                        pass
                     break
         return subjects
+
 
 class RelEntityModel(nn.Module):
     def __init__(self, args, hidden_size) -> None:
@@ -166,26 +154,25 @@ class RelEntityModel(nn.Module):
         self.args = args
         pretrain_path = args.pretrain_path
         relation_size = args.relation_number
-        entity_size = args.entity_number
         self.bert = BertModel.from_pretrained(pretrain_path, cache_dir="./bertbaseuncased")
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
-        self.entities_out = nn.Linear(hidden_size*2, entity_size)  # 关系预测
-        self.rels_out = nn.Linear(hidden_size*2, relation_size)  # 关系预测
+        self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
+
     def masked_avgpool(self, sent, mask):
         mask_ = mask.masked_fill(mask == 0, -1e9).float()
         score = torch.softmax(mask_, -1)
         pooler_output = torch.matmul(score.unsqueeze(1), sent).squeeze(1)
         return pooler_output
 
-    def forward(self, input_ids, attention_masks, token_type_ids):
+    def forward(self, input_ids, attention_masks, token_type_ids,batch_offsets):
         # 文本编码
         bert_output = self.bert(input_ids, attention_masks, token_type_ids, output_hidden_states=True)
         last_hidden_state = bert_output[0]
         all_hidden_size = bert_output[2]
 
-        # hidden state,last hidden state,all hidden states
+        # hidden_state,last_hidden_state,all_hidden_states
 
         # last_hidden_size = self.words_dropout(last_hidden_size)
         # print(last_hidden_state.size())
@@ -194,7 +181,7 @@ class RelEntityModel(nn.Module):
         if self.args.avg_pool:
             pooler_output = self.masked_avgpool(last_hidden_state, attention_masks)
         elif self.args.lstm_pool:
-            output, (hidden_last, cn)  = self.birnn(last_hidden_state)
+            output, (hidden_last, cn) = self.birnn(last_hidden_state)
             hidden_last_L = hidden_last[-2]
             # print(hidden_last_L.shape)  #[32, 384]
             # 反向最后一层，最后一个时刻
@@ -206,34 +193,31 @@ class RelEntityModel(nn.Module):
         else:
             pooler_output = bert_output[1]
 
-        entity_types = self.entities_out(pooler_output)
-        pred_rels=[]
-        for entity in get_entity():
-            head,tail=entity
-            head_token_enmbedding=last_hidden_state[head+1]
-            tail_token_enmbedding=last_hidden_state[tail+1]
-            entity_emb=(head_token_enmbedding+tail_token_enmbedding)/2
-
-            entity_emb=torch.concat([entity_emb,pooler_output],axis=0)
-            pred_rel = self.rels_out(pooler_output)
-            pred_rels.append(pred_rel)
-        pred_rels=torch.concat(pred_rels,axis=0)
-        # pred_rels = self.rels_out(pooler_output)
         # [batch,seq_len,2]
         pred_entity_heads = self.entity_heads_out(last_hidden_state)
         # [batch,seq_len,2]
         pred_entity_tails = self.entity_tails_out(last_hidden_state)
+        # print("pred_entity_heads.requires_grad",pred_entity_heads.requires_grad)
+        # print("pred_entity_tails.requires_grad",pred_entity_tails.requires_grad)
+
+        # subjects=get_entity(self.args, pred_entity_heads, pred_entity_tails, attention_masks,batch_offsets)
+        # print(subjects)
+        # print("pred_entity_heads.requires_grad", pred_entity_heads.requires_grad)
+        # print("pred_entity_tails.requires_grad", pred_entity_tails.requires_grad)
+
+        pred_rels = self.rels_out(pooler_output)
+
         if self.args.hidden_fuse:  # 获取所有的hidden states进行加权平均
             all_hidden_states = None
             j = 0
             for i, hiden_state in enumerate(all_hidden_size):
-                print('self.args.hidden_fuse_layers',self.args.hidden_fuse_layers)
-                print('i',i)
+                print('self.args.hidden_fuse_layers', self.args.hidden_fuse_layers)
+                print('i', i)
                 if i in self.args.hidden_fuse_layers:
                     if all_hidden_states is None:
-                        all_hidden_states = hiden_state*self.args.fuse_layers_weights[j]
+                        all_hidden_states = hiden_state * self.args.fuse_layers_weights[j]
                     else:
-                        all_hidden_states += hiden_state*self.args.fuse_layers_weights[j]
+                        all_hidden_states += hiden_state * self.args.fuse_layers_weights[j]
                     j += 1
             # [batch_size,seq_len,hidden_size,layer_number]
             # all_hidden_states = torch.cat(all_hidden_states,dim=-1)
@@ -241,7 +225,7 @@ class RelEntityModel(nn.Module):
             # last_hidden_state = self.hidden_weight(all_hidden_states).squeeze(-1)
             last_hidden_state = all_hidden_states
 
-        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,entity_types
+        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output
 
 
 class ObjModel(nn.Module):
@@ -257,7 +241,7 @@ class ObjModel(nn.Module):
         self.attention = Attention(config)
         self.obj_head = nn.Linear(hidden_size, 1)
         self.words_dropout = SpatialDropout(0.1)
-        self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size*2)
+        self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size * 2)
         self.hidden_size = hidden_size
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.rel_sub_fuse = nn.Linear(hidden_size, hidden_size)
@@ -291,7 +275,7 @@ class ObjModel(nn.Module):
         sub_tail = sub_tail.repeat(1, 1, self.hidden_size)
         # [batch_size,1,hidden_size]
         sub_tail_feature = last_hidden_size.gather(1, sub_tail)
-        sub_feature = (sub_head_feature+sub_tail_feature)/2
+        sub_feature = (sub_head_feature + sub_tail_feature) / 2
         if relation.shape[1] != 1:
             # [rel_num,1,hidden_size]
             rel_feature = rel_feature.transpose(1, 0)
@@ -332,7 +316,7 @@ class ObjModel(nn.Module):
         # causal and attention masks must have same type with pytorch version < 1.3
         causal_mask = causal_mask.to(attention_mask.dtype)
         extended_attention_mask = causal_mask[:, None, :, :]
-        extended_attention_mask = (1e-10)*(1-extended_attention_mask)
+        extended_attention_mask = (1e-10) * (1 - extended_attention_mask)
         return extended_attention_mask
 
 
@@ -343,10 +327,10 @@ class TDEER(nn.Module):
         self.args = args
         config = BertConfig.from_pretrained(pretrain_path)
         hidden_size = config.hidden_size
-        self.rel_entity_model = RelEntityModel(args, hidden_size) # 关系 实体是被
+        self.rel_entity_model = RelEntityModel(args, hidden_size)  # 关系 实体是被
         self.obj_model = ObjModel(args, config)
 
-    def forward(self, input_ids, attention_masks, token_type_ids, relation=None, sub_head=None, sub_tail=None):
+    def forward(self, input_ids, attention_masks, token_type_ids, relation=None, sub_head=None, sub_tail=None,batch_offsets=None):
         """_summary_
         Args:
             input_ids (_type_): [batch_size,seq_len]
@@ -359,8 +343,6 @@ class TDEER(nn.Module):
             _type_: _description_
         """
         pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output = self.rel_entity_model(
-            input_ids, attention_masks, token_type_ids)
+            input_ids, attention_masks, token_type_ids,batch_offsets)
         pred_obj_head, obj_hidden = self.obj_model(relation, last_hidden_state, sub_head, sub_tail, attention_masks)
         return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output
-
-
