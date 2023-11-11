@@ -85,6 +85,7 @@ relation_number = train_dataset.relation_size
 args.relation_number = relation_number
 args.train_steps = len(train_dataset)
 args.warmup_ratio = 0.1
+args.entity_number=3
 args.weight_decay = 0.01
 args.eps = 1e-6
 args.threshold = 0.5
