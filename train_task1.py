@@ -20,7 +20,7 @@ from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
 from utils.adv_utils import FGM,EMA
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 log_writer = SummaryWriter('./log')
 
@@ -276,22 +276,22 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
             model, batch,
             rel_loss, entity_head_loss, entity_tail_loss, obj_loss
         )
-        if args.is_rdrop:
-            loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
-                model, batch,
-                rel_loss, entity_head_loss, entity_tail_loss, obj_loss
-            )
-            loss = (loss + loss_2) / 2
-            # obj_kl_loss = compute_kl_loss(obj_hidden,obj_hidden_2)
-            hidden_size_kl_loss = compute_kl_loss(last_hidden_size, last_hidden_size_2)
-            kl_loss = hidden_size_kl_loss
-            loss = loss + 5 * kl_loss
+        if epoch>10:
+            if args.is_rdrop:
+                loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
+                    model, batch,
+                    rel_loss, entity_head_loss, entity_tail_loss, obj_loss
+                )
+                loss = (loss + loss_2) / 2
+                # obj_kl_loss = compute_kl_loss(obj_hidden,obj_hidden_2)
+                hidden_size_kl_loss = compute_kl_loss(last_hidden_size, last_hidden_size_2)
+                kl_loss = hidden_size_kl_loss
+                loss = loss + 5 * kl_loss
 
-        # print(loss)
-        losses.append(loss.item())
-        loss.backward()
-
-        if epoch>14:
+            # print(loss)
+            losses.append(loss.item())
+            loss.backward()
+        if epoch>10:
             ##对抗训练
             fgm.attack()
             loss_adv, _,_ = train_one(
