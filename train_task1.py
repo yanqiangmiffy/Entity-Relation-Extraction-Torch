@@ -227,13 +227,14 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
         batch_offsets=batch_offsets
     )
 
-    pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,relations_logits_raw  = output
+    relations_logits_new, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,relations_logits_raw  = output
 
     loss = 0
     rel_loss = rel_loss(relations_logits_raw, batch_rels)
     rel_loss += focal_loss(relations_logits_raw, batch_rels)
     loss += loss_weight[0] * rel_loss
 
+    # loss = 0
     # total_loss = 0
     # for idx,pred_rel in enumerate(pred_rels):
     #     # batch_rels = torch.mask(entity_types, 1)
@@ -279,7 +280,7 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
             model, batch,
             rel_loss, entity_head_loss, entity_tail_loss, obj_loss
         )
-        if epoch>10:
+        if epoch>0:
             if args.is_rdrop:
                 loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
                     model, batch,
@@ -294,7 +295,7 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
             # print(loss)
             losses.append(loss.item())
             loss.backward()
-        if epoch>10:
+        if epoch>16:
             ##对抗训练
             fgm.attack()
             loss_adv, _,_ = train_one(
@@ -319,7 +320,7 @@ def validation_step(model, batch):
     batch_segments = batch_segments.to(device)
     batch_text_masks = batch_text_masks.to(device)
 
-    relations_logits, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output,relations_logits_raw = model.rel_entity_model(
+    relations_logits_new, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output,relations_logits_raw = model.rel_entity_model(
         batch_tokens, batch_attention_masks, batch_segments,batch_offsets)
 
     entity_heads_logits = torch.sigmoid(entity_heads_logits)
