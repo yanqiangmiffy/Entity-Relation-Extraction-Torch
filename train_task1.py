@@ -291,14 +291,15 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
         losses.append(loss.item())
         loss.backward()
 
-        ##对抗训练
-        fgm.attack()
-        loss_adv, _,_ = train_one(
-            model, batch,
-            rel_loss, entity_head_loss, entity_tail_loss, obj_loss
-        )
-        loss_adv.backward()
-        fgm.restore()
+        if epoch>14:
+            ##对抗训练
+            fgm.attack()
+            loss_adv, _,_ = train_one(
+                model, batch,
+                rel_loss, entity_head_loss, entity_tail_loss, obj_loss
+            )
+            loss_adv.backward()
+            fgm.restore()
 
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
         optimizer.step()
