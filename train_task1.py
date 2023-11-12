@@ -19,7 +19,7 @@ from model import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
-
+from utils.adv_utils import FGM,EMA
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 log_writer = SummaryWriter('./log')
@@ -171,6 +171,38 @@ def compute_kl_loss(p, q, pad_mask=None):
     loss = (p_loss + q_loss) / 2
     return loss
 
+rel_label_map = {
+    'ORG': {
+        "0": "/business/company/advisors",
+        "1": "/business/company/founders",
+        "2": "/business/company/industry",
+        "3": "/business/company/major_shareholders",
+        "4": "/business/company/place_founded",
+        "16": "/people/person/ethnicity",  #
+        "22": "/sports/sports_team/location",
+    },
+    'PER': {
+        "5": "/business/company_shareholder/major_shareholder_of",
+        "6": "/business/person/company",
+        "12": "/people/deceased_person/place_of_death",
+        "13": "/people/ethnicity/geographic_distribution",
+        "14": "/people/ethnicity/people",
+        "15": "/people/person/children",
+        "17": "/people/person/nationality",
+        "18": "/people/person/place_lived",
+        "19": "/people/person/place_of_birth",
+        "20": "/people/person/profession",
+        "21": "/people/person/religion",
+    },
+    'LOC': {
+        "7": "/location/administrative_division/country",
+        "8": "/location/country/administrative_divisions",
+        "9": "/location/country/capital",
+        "10": "/location/location/contains",
+        "11": "/location/neighborhood/neighborhood_of",
+        "23": "/sports/sports_team_location/teams"
+    }
+}
 
 def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_loss):
     batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_entity_heads, batch_entity_tails, batch_rels, \
@@ -195,12 +227,21 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
         batch_offsets=batch_offsets
     )
 
-    pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size = output
+    pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,relations_logits_raw  = output
 
     loss = 0
-    rel_loss = rel_loss(pred_rels, batch_rels)
-    rel_loss += focal_loss(pred_rels, batch_rels)
-    loss += loss_weight[0] * rel_loss
+    rel_loss = rel_loss(relations_logits_raw, batch_rels)
+    total_loss = 0
+    # for idx,pred_rel in enumerate(pred_rels):
+    #     # batch_rels = torch.mask(entity_types, 1)
+    #     # print(pred_rel.size())
+    #     # print(batch_rels.size())
+    #     for entity_rel in pred_rel:
+    #         total_loss += rel_loss(entity_rel, batch_rels[idx])
+    # print(pred_rels)
+
+    rel_loss += focal_loss(relations_logits_raw, batch_rels)
+    loss += loss_weight[0] * total_loss
 
     batch_text_mask = batch_text_masks.reshape(-1, 1)
 
@@ -225,7 +266,7 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
     return loss, obj_hidden, last_hidden_size
 
 
-def train_epoch(model, epoch, optimizer, scheduler):
+def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
     model.train()
     loguru.logger.info(f"training at {epoch}")
     losses = []
@@ -250,12 +291,21 @@ def train_epoch(model, epoch, optimizer, scheduler):
         losses.append(loss.item())
         loss.backward()
 
+        ##对抗训练
+        fgm.attack()
+        loss_adv, _,_ = train_one(
+            model, batch,
+            rel_loss, entity_head_loss, entity_tail_loss, obj_loss
+        )
+        loss_adv.backward()
+        fgm.restore()
+
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
         optimizer.step()
         scheduler.step()
         optimizer.zero_grad()
         tqdm_bar.set_postfix_str(f'loss: {loss.item():.4f}')
-
+        ema.update()
 
 def validation_step(model, batch):
     batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_sets, batch_triples_index_set, batch_text_masks = batch
@@ -265,13 +315,13 @@ def validation_step(model, batch):
     batch_segments = batch_segments.to(device)
     batch_text_masks = batch_text_masks.to(device)
 
-    relations_logits, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output = model.rel_entity_model(
-        batch_tokens, batch_attention_masks, batch_segments)
+    relations_logits, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output,relations_logits_raw = model.rel_entity_model(
+        batch_tokens, batch_attention_masks, batch_segments,batch_offsets)
 
     entity_heads_logits = torch.sigmoid(entity_heads_logits)
     entity_tails_logits = torch.sigmoid(entity_tails_logits)
 
-    relations_logits = torch.sigmoid(relations_logits)
+    relations_logits = torch.sigmoid(relations_logits_raw)
     batch_size = entity_heads_logits.shape[0]
     entity_heads_logits = entity_heads_logits.cpu().numpy()
     entity_tails_logits = entity_tails_logits.cpu().numpy()
@@ -431,7 +481,8 @@ def decode_entity(text: str, mapping, start: int, end: int):
     return entity
 
 
-def valid_epoch(model, epoch):
+def valid_epoch(model, epoch,ema):
+    ema.apply_shadow()
     model.eval()
     loguru.logger.info(f"validing at {epoch}")
     epoch_texts, epoch_pred_triple_sets, epoch_triple_sets = [], [], []
@@ -451,10 +502,15 @@ def valid_epoch(model, epoch):
 print(args.is_train)
 for epoch in range(num_epochs):
     optimizer, scheduler = build_optimizer(args, model)
+    fgm = FGM(model)
+
+    ema = EMA(model, 0.995)
+    ema.register()
 
     if args.is_train:
-        train_epoch(model, epoch, optimizer, scheduler)
+        train_epoch(model, epoch, optimizer, scheduler,fgm,ema)
         torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
     if args.is_valid:
         model.load_state_dict(torch.load(f"output/model_epoch{epoch}.bin"))
-        valid_epoch(model, epoch)
+        valid_epoch(model, epoch,ema)
+        ema.restore()

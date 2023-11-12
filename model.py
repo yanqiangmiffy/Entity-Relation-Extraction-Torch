@@ -6,6 +6,7 @@ import torch.nn as nn
 from transformers.models.bert.configuration_bert import BertConfig
 # from utils.Callback import FGM
 from transformers.models.bert.modeling_bert import BertSelfOutput, BertModel
+
 from utils.utils import rematch
 
 
@@ -114,7 +115,7 @@ class SpatialDropout(nn.Module):
         return output
 
 
-def get_entity(args, entity_heads_logits, entity_tails_logits, attention_masks,batch_offsets):
+def get_entity(args, entity_heads_logits, entity_tails_logits, attention_masks, batch_offsets):
     entity_heads_logits = torch.sigmoid(entity_heads_logits)
     entity_tails_logits = torch.sigmoid(entity_tails_logits)
 
@@ -131,21 +132,22 @@ def get_entity(args, entity_heads_logits, entity_tails_logits, attention_masks,b
         entity_tails_logit = entity_tails_logits[index] * text_attention_mask
 
         entity_heads, entity_tails = np.where(
-            entity_heads_logit > args.threshold), np.where(entity_tails_logit > args.threshold)
+            entity_heads_logit > 0.5), np.where(entity_tails_logit > 0.5)
         subjects = []
         for head, head_type in zip(*entity_heads):
             for tail, tail_type in zip(*entity_tails):
 
                 if head >= len(mapping) or tail >= len(mapping):
                     break
-
                 if head <= tail and head_type == tail_type:
                     if head_type == 0:
                         subjects.append((head, tail))
                     else:
                         pass
                     break
-        return subjects
+        pred_triple_sets.append(subjects)
+    return pred_triple_sets
+    # 可能 预测的实体为空；
 
 
 class RelEntityModel(nn.Module):
@@ -157,7 +159,9 @@ class RelEntityModel(nn.Module):
         self.bert = BertModel.from_pretrained(pretrain_path, cache_dir="./bertbaseuncased")
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
-        self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
+        # self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
+        self.rels_out = nn.Linear(2304, relation_size)  # 关系预测
+        self.keep_rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
 
     def masked_avgpool(self, sent, mask):
@@ -166,7 +170,7 @@ class RelEntityModel(nn.Module):
         pooler_output = torch.matmul(score.unsqueeze(1), sent).squeeze(1)
         return pooler_output
 
-    def forward(self, input_ids, attention_masks, token_type_ids,batch_offsets):
+    def forward(self, input_ids, attention_masks, token_type_ids, batch_offsets):
         # 文本编码
         bert_output = self.bert(input_ids, attention_masks, token_type_ids, output_hidden_states=True)
         last_hidden_state = bert_output[0]
@@ -200,12 +204,50 @@ class RelEntityModel(nn.Module):
         # print("pred_entity_heads.requires_grad",pred_entity_heads.requires_grad)
         # print("pred_entity_tails.requires_grad",pred_entity_tails.requires_grad)
 
-        # subjects=get_entity(self.args, pred_entity_heads, pred_entity_tails, attention_masks,batch_offsets)
+        subjects = get_entity(self.args, pred_entity_heads, pred_entity_tails, attention_masks, batch_offsets)
+        # print(len(subjects))
         # print(subjects)
         # print("pred_entity_heads.requires_grad", pred_entity_heads.requires_grad)
         # print("pred_entity_tails.requires_grad", pred_entity_tails.requires_grad)
 
-        pred_rels = self.rels_out(pooler_output)
+        pred_rels_raw = self.keep_rels_out(pooler_output)
+        pred_rels = []
+        for idx, sample_subjects in enumerate(subjects):
+            sample_rels = []
+            if len(sample_subjects) > 0:
+                for entity in sample_subjects:
+                    #
+                    head, tail = entity
+                    head_token_enmbedding = last_hidden_state[idx][head]
+                    tail_token_enmbedding = last_hidden_state[idx][tail]
+                    entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
+
+                    # print(head_token_enmbedding.size()) # 64, 81, 768
+                    # print(tail_token_enmbedding.size()) # 64, 81, 768
+                    # print(last_hidden_state.size()) # 64, 81, 768
+
+                    # print(entity_emb.size()) # 768
+                    # print(pooler_output[idx].size()) # 1536
+
+                    entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
+                    # print(entity_emb.size()) # 2304
+
+                    pred_rel = self.rels_out(entity_emb)
+                    sample_rels.append(pred_rel)  # 24
+
+                    # print(pred_rel.size())
+            else:
+                pred_rel = self.keep_rels_out(pooler_output[idx])
+                sample_rels.append(pred_rel)
+                # print(pred_rel.size())
+            # print(sample_rels[0].size())
+            # print(torch.concat(sample_rels, dim=0).size())
+            # print(torch.concat(sample_rels, dim=0).resize(len(sample_rels),24 ))
+            # print(torch.concat(sample_rels, dim=1).size())
+            pred_rels.append(torch.concat(sample_rels, dim=0).resize(len(sample_rels), 24))
+        # print(pred_rels)
+        # pred_rels = torch.concat(pred_rels, dim=0)
+        # print(pred_rels.shape)
 
         if self.args.hidden_fuse:  # 获取所有的hidden states进行加权平均
             all_hidden_states = None
@@ -225,7 +267,7 @@ class RelEntityModel(nn.Module):
             # last_hidden_state = self.hidden_weight(all_hidden_states).squeeze(-1)
             last_hidden_state = all_hidden_states
 
-        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output
+        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,pred_rels_raw
 
 
 class ObjModel(nn.Module):
@@ -330,7 +372,8 @@ class TDEER(nn.Module):
         self.rel_entity_model = RelEntityModel(args, hidden_size)  # 关系 实体是被
         self.obj_model = ObjModel(args, config)
 
-    def forward(self, input_ids, attention_masks, token_type_ids, relation=None, sub_head=None, sub_tail=None,batch_offsets=None):
+    def forward(self, input_ids, attention_masks, token_type_ids, relation=None, sub_head=None, sub_tail=None,
+                batch_offsets=None):
         """_summary_
         Args:
             input_ids (_type_): [batch_size,seq_len]
@@ -342,7 +385,7 @@ class TDEER(nn.Module):
         Returns:
             _type_: _description_
         """
-        pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output = self.rel_entity_model(
-            input_ids, attention_masks, token_type_ids,batch_offsets)
+        pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,pred_rels_raw = self.rel_entity_model(
+            input_ids, attention_masks, token_type_ids, batch_offsets)
         pred_obj_head, obj_hidden = self.obj_model(relation, last_hidden_state, sub_head, sub_tail, attention_masks)
-        return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output
+        return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output,pred_rels_raw
