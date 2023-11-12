@@ -231,7 +231,10 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
 
     loss = 0
     rel_loss = rel_loss(relations_logits_raw, batch_rels)
-    total_loss = 0
+    rel_loss += focal_loss(relations_logits_raw, batch_rels)
+    loss += loss_weight[0] * rel_loss
+
+    # total_loss = 0
     # for idx,pred_rel in enumerate(pred_rels):
     #     # batch_rels = torch.mask(entity_types, 1)
     #     # print(pred_rel.size())
@@ -239,9 +242,9 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
     #     for entity_rel in pred_rel:
     #         total_loss += rel_loss(entity_rel, batch_rels[idx])
     # print(pred_rels)
-
-    rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    loss += loss_weight[0] * total_loss
+    #
+    # rel_loss += focal_loss(relations_logits_raw, batch_rels)
+    # loss += loss_weight[0] * total_loss
 
     batch_text_mask = batch_text_masks.reshape(-1, 1)
 
