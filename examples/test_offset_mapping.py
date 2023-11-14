@@ -19,6 +19,7 @@ text = "80 % of Americans believe seeking multiple opinions can help them make b
 text="Massachusetts ASTON MAGNA Great Barrington ; also at Bard College , Annandale-on-Hudson , N.Y. , July 1-Aug ."
 tokens = tokenizer.tokenize(text, add_special_tokens=True)
 outputs = tokenizer.encode_plus(text, return_offsets_mapping=True,
+                                return_attention_mask=True,
                                 add_special_tokens=True)  # add_special_tokens=True 添加 [cls] [sep]等标志
 token_span = outputs["offset_mapping"]
 print(len(tokens),tokens)
@@ -28,3 +29,5 @@ print(len(token_span),token_span)
 for offset_mapping in token_span:
     start,end=offset_mapping
     print(text[start:end],offset_mapping)
+
+# print(outputs)

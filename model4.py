@@ -189,7 +189,9 @@ class RelEntityModel(nn.Module):
         last_hidden_state = bert_output[0]
         all_hidden_size = bert_output[2]
 
-        # hidden_state,last_hidden_state,all_hidden_states
+        # last_hidden_state:cls 1x768,
+        # hidden_state:token 31x768,
+        # all_hidden_states":12x31x768
 
         # last_hidden_size = self.words_dropout(last_hidden_size)
         # print(last_hidden_state.size())
@@ -207,17 +209,25 @@ class RelEntityModel(nn.Module):
             # 进行拼接
             pooler_output = torch.cat([hidden_last_L, hidden_last_R], dim=-1) # 64x1536
             # loguru.logger.info(pooler_output.size)
+        # elif self.args.second2last:
+        #     pass
+        # elif self.args.lastfour:
+        #     pass
         elif self.args.att_pool:
             cls_outputs = torch.stack(
                 [self.dropout(layer) for layer in all_hidden_size[-12:]], dim=0
             )
+            # print(torch.softmax(self.layer_weights, dim=0).size())#[12]
+            # print(torch.softmax(self.layer_weights, dim=0).unsqueeze(1).unsqueeze(1).unsqueeze(1).size())# [12, 1, 1, 1]
+            # print(cls_outputs.size())# [12, 64, 96, 768]
             cls_output = (
                     torch.softmax(self.layer_weights, dim=0).unsqueeze(1).unsqueeze(1).unsqueeze(1) * cls_outputs).sum(
-                0)
+                0)# 层间注意力
+            # print(cls_output.size())
 
             pooler_output = torch.mean(
                 torch.stack(
-                    [torch.sum(self.attention(self.high_dropout(cls_output)) * cls_output, dim=1) for _ in range(5)],
+                    [torch.sum(self.attention(self.high_dropout(cls_output)) * cls_output, dim=1) for _ in range(5)],# token注意力
                     dim=0,
                 ),
                 dim=0,
@@ -232,51 +242,51 @@ class RelEntityModel(nn.Module):
         # print("pred_entity_heads.requires_grad",pred_entity_heads.requires_grad)
         # print("pred_entity_tails.requires_grad",pred_entity_tails.requires_grad)
 
-        subjects = get_entity(self.args, pred_entity_heads, pred_entity_tails, attention_masks, batch_offsets)
+        # subjects = get_entity(self.args, pred_entity_heads, pred_entity_tails, attention_masks, batch_offsets)
         # print(len(subjects))
         # print(subjects)
         # print("pred_entity_heads.requires_grad", pred_entity_heads.requires_grad)
         # print("pred_entity_tails.requires_grad", pred_entity_tails.requires_grad)
 
         pred_rels_raw = self.keep_rels_out(pooler_output)
-
+        #
         pred_rels = []
-        for idx, sample_subjects in enumerate(subjects):# 64 batch_size
-            sample_rels = []
-            if len(sample_subjects) > 0:
-                for entity in sample_subjects:
-                    #
-                    head, tail = entity
-                    head_token_enmbedding = last_hidden_state[idx][head]
-                    tail_token_enmbedding = last_hidden_state[idx][tail]
-                    entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
-
-                    # print(head_token_enmbedding.size()) # 64, 81, 768
-                    # print(tail_token_enmbedding.size()) # 64, 81, 768
-                    # print(last_hidden_state.size()) # 64, 81, 768
-
-                    # print(entity_emb.size()) # 768
-                    # print(pooler_output[idx].size()) # 1536
-
-                    entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
-                    # print(entity_emb.size()) # 2304
-
-                    pred_rel = self.rels_out(entity_emb) # 1x24
-                    sample_rels.append(pred_rel)  # 24
-
-                    # print(pred_rel.size())
-            else:
-                pred_rel = self.keep_rels_out(pooler_output[idx])
-                sample_rels.append(pred_rel)
-                # print(pred_rel.size())
-            # print(sample_rels[0].size())
-            # print(torch.concat(sample_rels, dim=0).size())
-            # print(torch.concat(sample_rels, dim=0).resize(len(sample_rels),24 ))
-            # print(torch.concat(sample_rels, dim=1).size())
-            #1 3个实体 3x24
-            # 2 2个实体 2x24
-            # 3 1个实体 1x24
-            pred_rels.append(torch.concat(sample_rels, dim=0).resize(len(sample_rels), 24))
+        # for idx, sample_subjects in enumerate(subjects):# 64 batch_size
+        #     sample_rels = []
+        #     if len(sample_subjects) > 0:
+        #         for entity in sample_subjects:
+        #             #
+        #             head, tail = entity
+        #             head_token_enmbedding = last_hidden_state[idx][head]
+        #             tail_token_enmbedding = last_hidden_state[idx][tail]
+        #             entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
+        #
+        #             # print(head_token_enmbedding.size()) # 64, 81, 768
+        #             # print(tail_token_enmbedding.size()) # 64, 81, 768
+        #             # print(last_hidden_state.size()) # 64, 81, 768
+        #
+        #             # print(entity_emb.size()) # 768
+        #             # print(pooler_output[idx].size()) # 1536
+        #
+        #             entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
+        #             # print(entity_emb.size()) # 2304
+        #
+        #             pred_rel = self.rels_out(entity_emb) # 1x24
+        #             sample_rels.append(pred_rel)  # 24
+        #
+        #             # print(pred_rel.size())
+        #     else:
+        #         pred_rel = self.keep_rels_out(pooler_output[idx])
+        #         sample_rels.append(pred_rel)
+        #         # print(pred_rel.size())
+        #     # print(sample_rels[0].size())
+        #     # print(torch.concat(sample_rels, dim=0).size())
+        #     # print(torch.concat(sample_rels, dim=0).resize(len(sample_rels),24 ))
+        #     # print(torch.concat(sample_rels, dim=1).size())
+        #     #1 3个实体 3x24
+        #     # 2 2个实体 2x24
+        #     # 3 1个实体 1x24
+        #     pred_rels.append(torch.concat(sample_rels, dim=0).resize(len(sample_rels), 24))
 
         # print(pred_rels)
         # pred_rels = torch.concat(pred_rels, dim=0)

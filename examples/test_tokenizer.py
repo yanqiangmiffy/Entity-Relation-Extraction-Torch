@@ -12,10 +12,10 @@ from transformers import BertTokenizer
 tokenizer = BertTokenizer.from_pretrained('../pretrained_models/bert-base-uncased')
 print(tokenizer)
 
-token_ids = [
+token_ids = {
     101, 4404, 14327, 20201, 2307, 26469, 1025, 2036, 2012, 22759, 2267, 1010, 4698, 8943, 2571, 1011, 2006,
     1011, 6842, 1010, 1050, 1012, 1061, 1012, 1010, 2251, 1015, 1011, 15476, 1012, 102
-]
+}
 
 text = "Massachusetts ASTON MAGNA Great Barrington ; also at Bard College , Annandale-on-Hudson , N.Y. , July 1-Aug ."
 tokens = tokenizer.convert_ids_to_tokens(token_ids[1:-1])
