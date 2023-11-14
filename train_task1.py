@@ -237,23 +237,23 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
 
     relations_logits_new, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,relations_logits_raw  = output
 
-    loss = 0
-    rel_loss = rel_loss(relations_logits_raw, batch_rels)
-    rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    loss += loss_weight[0] * rel_loss
-
     # loss = 0
-    # total_loss = 0
-    # for idx,pred_rel in enumerate(pred_rels):
-    #     # batch_rels = torch.mask(entity_types, 1)
-    #     # print(pred_rel.size())
-    #     # print(batch_rels.size())
-    #     for entity_rel in pred_rel:
-    #         total_loss += rel_loss(entity_rel, batch_rels[idx])
-    # print(pred_rels)
-    #
+    # rel_loss = rel_loss(relations_logits_raw, batch_rels)
     # rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    # loss += loss_weight[0] * total_loss
+    # loss += loss_weight[0] * rel_loss
+
+    loss = 0
+    total_loss = 0
+    for idx,pred_rel in enumerate(relations_logits_new):
+        # batch_rels = torch.mask(entity_types, 1)
+        # print(pred_rel.size())
+        # print(batch_rels.size())
+        for entity_rel in pred_rel:
+            total_loss += rel_loss(entity_rel, batch_rels[idx])
+    # print(pred_rels)
+
+    rel_loss += focal_loss(relations_logits_raw, batch_rels)
+    loss += loss_weight[0] * total_loss
 
     batch_text_mask = batch_text_masks.reshape(-1, 1)
 

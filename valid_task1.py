@@ -512,8 +512,5 @@ def valid_epoch(model, epoch):
 
 
 print(args.is_train)
-for epoch in range(num_epochs):
-    optimizer, scheduler = build_optimizer(args, model)
-
-    model.load_state_dict(torch.load(f"output/model_epoch19.bin"))
-    valid_epoch(model, epoch)
+model.load_state_dict(torch.load(f"output/model_epoch19.bin"))
+valid_epoch(model, 19)
