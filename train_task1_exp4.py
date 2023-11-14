@@ -288,7 +288,7 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
             model, batch,
             rel_loss, entity_head_loss, entity_tail_loss, obj_loss
         )
-        if epoch>=0:
+        if epoch>=10:
             if args.is_rdrop:
                 loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
                     model, batch,
@@ -303,7 +303,7 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
             # print(loss)
             losses.append(loss.item())
             loss.backward()
-        if epoch>=0:
+        if epoch>=10:
             ##对抗训练
             fgm.attack()
             loss_adv, _,_ = train_one(
