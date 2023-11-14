@@ -301,8 +301,9 @@ def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
                 loss = loss + 5 * kl_loss
 
             # print(loss)
-            losses.append(loss.item())
-            loss.backward()
+        losses.append(loss.item())
+        loss.backward()
+
         if epoch>=10:
             ##对抗训练
             fgm.attack()
