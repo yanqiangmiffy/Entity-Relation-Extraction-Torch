@@ -330,7 +330,7 @@ def validation_step(model, batch):
 
     relations_logits_new, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output,relations_logits_raw = model.rel_entity_model(
         batch_tokens, batch_attention_masks, batch_segments,batch_offsets)
-
+    # relations_logits_new[relations_logits_raw,relations_logits_raw,relations_logits_raw]
     entity_heads_logits = torch.sigmoid(entity_heads_logits)
     entity_tails_logits = torch.sigmoid(entity_tails_logits)
 

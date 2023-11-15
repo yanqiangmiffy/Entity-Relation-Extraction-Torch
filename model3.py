@@ -160,8 +160,8 @@ class RelEntityModel(nn.Module):
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
         # self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
-        self.rels_out = nn.Linear(2304, relation_size)  # 关系预测
-        self.keep_rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
+        self.rels_out = nn.Linear(2304, relation_size)  # 新的关系预测
+        self.keep_rels_out = nn.Linear(hidden_size * 2, relation_size)  # 原始论文的关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
 
     def masked_avgpool(self, sent, mask):
