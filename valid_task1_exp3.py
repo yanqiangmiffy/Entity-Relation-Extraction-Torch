@@ -15,7 +15,7 @@ from transformers import AdamW
 from transformers import get_linear_schedule_with_warmup
 
 from dataset import TDEERDataset, collate_fn, collate_fn_val
-from model import TDEER
+from model3 import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
@@ -512,5 +512,6 @@ def valid_epoch(model, epoch):
 
 
 print(args.is_train)
-model.load_state_dict(torch.load(f"output/model_epoch19.bin"))
-valid_epoch(model, 19)
+epoch=19
+model.load_state_dict(torch.load(f"output/exp3/NYT/model_epoch{epoch}.bin",map_location="cpu"))
+valid_epoch(model, epoch)

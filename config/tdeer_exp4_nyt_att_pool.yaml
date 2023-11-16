@@ -16,6 +16,7 @@ model_params:
   is_rdrop: true
   # 是否使用bert所有hidden states融合策略
   hidden_fuse: false
+  use_split: true
   # 融合倒数后几层的hidden states,最多12层
   hidden_fuse_layers: [8]
   avg_pool: false

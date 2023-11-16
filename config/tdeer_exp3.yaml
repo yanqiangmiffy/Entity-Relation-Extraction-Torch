@@ -13,11 +13,12 @@ model_params:
     - 2
     - 2
   # 是否使用R-drop训练策略
-  is_rdrop: true
+  is_rdrop: false
   # 是否使用bert所有hidden states融合策略
   hidden_fuse: false
+  use_split: false
   # 融合倒数后几层的hidden states,最多12层
   hidden_fuse_layers: [8]
   avg_pool: false
-  lstm_pool: false
-  att_pool: true
+  lstm_pool: true
+  att_pool: false

@@ -5,3 +5,4 @@ log
 output
 .pytest_cache
 */.pytest_cache
+*.zip
