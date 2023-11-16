@@ -36,7 +36,7 @@ class TDEERDataset(Dataset):
         else:
             loguru.logger.info("stage for dev/test dataset")
             filenames = os.path.join(args.data_dir, "dev_triples.json")
-        with open(filenames, 'r') as f:
+        with open(filenames, 'r',encoding='utf-8') as f:
             lines = json.load(f)
             loguru.logger.info(f"dataset size is {len(lines)}")
         if self.is_training:

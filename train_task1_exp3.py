@@ -15,7 +15,7 @@ from transformers import AdamW
 from transformers import get_linear_schedule_with_warmup
 
 from dataset import TDEERDataset, collate_fn, collate_fn_val
-from model import TDEER
+from model3 import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
@@ -44,11 +44,11 @@ def parser_args():
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
-    parser.add_argument('--data_dir', type=str, default="data/NYT", help='定义数据集路径')
+    parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
     parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
     parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
     parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
-    parser.add_argument('--epoch', default=30, type=int, help='specify the epoch size')
+    parser.add_argument('--epoch', default=20, type=int, help='specify the epoch size')
     parser.add_argument('--batch_size', default=64, type=int, help='specify the batch size')
     parser.add_argument('--output_path', default="event_extract", type=str, help='将每轮的验证结果保存的路径')
     parser.add_argument('--float16', default=False, type=bool, help='是否采用浮点16进行半精度计算')
@@ -237,23 +237,23 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
 
     relations_logits_new, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,relations_logits_raw  = output
 
-    # loss = 0
-    # rel_loss = rel_loss(relations_logits_raw, batch_rels)
-    # rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    # loss += loss_weight[0] * rel_loss
-
     loss = 0
-    total_loss = 0
-    for idx,pred_rel in enumerate(relations_logits_new):
-        # batch_rels = torch.mask(entity_types, 1)
-        # print(pred_rel.size())
-        # print(batch_rels.size())
-        for entity_rel in pred_rel:
-            total_loss += rel_loss(entity_rel, batch_rels[idx])
-    # print(pred_rels)
-
+    rel_loss = rel_loss(relations_logits_raw, batch_rels)
     rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    loss += loss_weight[0] * total_loss
+    loss += loss_weight[0] * rel_loss
+
+    # loss = 0
+    # total_loss = 0
+    # for idx,pred_rel in enumerate(relations_logits_new):
+    #     # batch_rels = torch.mask(entity_types, 1)
+    #     # print(pred_rel.size())
+    #     # print(batch_rels.size())
+    #     for entity_rel in pred_rel:
+    #         total_loss += rel_loss(entity_rel, batch_rels[idx])
+    # # print(pred_rels)
+    #
+    # rel_loss += focal_loss(relations_logits_raw, batch_rels)
+    # loss += loss_weight[0] * total_loss
 
     batch_text_mask = batch_text_masks.reshape(-1, 1)
 
@@ -521,7 +521,7 @@ for epoch in range(num_epochs):
     ema.register()
 
     if args.is_train:
-        model.load_state_dict(torch.load(f"output/model_epoch16.bin"))
+        # model.load_state_dict(torch.load(f"output/model_epoch16.bin"))
         train_epoch(model, epoch, optimizer, scheduler,fgm,ema)
         torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
     if args.is_valid:
