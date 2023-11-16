@@ -212,7 +212,7 @@ class RelEntityModel(nn.Module):
 
         pred_rels_raw = self.keep_rels_out(pooler_output)
 
-        # pred_rels = []
+        pred_rels = []
         # for idx, sample_subjects in enumerate(subjects):# 64 batch_size
         #     sample_rels = []
         #     if len(sample_subjects) > 0:
