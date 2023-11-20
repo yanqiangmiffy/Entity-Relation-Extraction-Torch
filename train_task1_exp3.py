@@ -21,7 +21,7 @@ from utils.adv_utils import FGM, EMA
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
-
+from utils.entity_rel import get_entity_types
 os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 log_writer = SummaryWriter('./log')
@@ -45,7 +45,7 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer",
+    parser.add_argument('--model_type', default="tdeer_exp3_webnlg",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
@@ -55,7 +55,7 @@ def parser_args():
     parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
     parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
     parser.add_argument('--epoch', default=20, type=int, help='specify the epoch size')
-    parser.add_argument('--batch_size', default=64, type=int, help='specify the batch size')
+    parser.add_argument('--batch_size', default=32, type=int, help='specify the batch size')
     parser.add_argument('--output_path', default="event_extract", type=str, help='将每轮的验证结果保存的路径')
     parser.add_argument('--float16', default=False, type=bool, help='是否采用浮点16进行半精度计算')
     parser.add_argument('--grad_accumulations_steps', default=3, type=int, help='梯度累计步骤')
@@ -114,9 +114,15 @@ with open(os.path.join(args.data_dir, "rel2id.json"), 'r') as f:
     relation = json.load(f)
 id2rel = relation[0]
 
+
 obj_loss = nn.BCEWithLogitsLoss(reduction="none")
-focal_loss = MLFocalLoss()
-b_focal_loss = BCEFocalLoss(alpha=0.25, gamma=2)
+
+focal_loss = MLFocalLoss() # 解决关系分类不均衡的loss
+
+b_focal_loss = BCEFocalLoss(alpha=0.25, gamma=2) # 解决object不均衡的loss
+
+
+
 threshold = 0.5
 num_epochs = 30
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -249,7 +255,8 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
         loss = 0
         total_loss = 0
         for idx, pred_rel in enumerate(relations_logits_new):
-            # batch_rels = torch.mask(entity_types, 1)
+            entity_types=get_entity_types(pred_rel)
+            batch_rels = batch_rels.masked_fill(entity_types, 1)
             # print(pred_rel.size())
             # print(batch_rels.size())
             for entity_rel in pred_rel:
@@ -280,8 +287,8 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
 
     pred_obj_head = pred_obj_head.reshape(-1, 1)
     batch_sample_obj_heads = batch_sample_obj_heads.reshape(-1, 1)
-    obj_loss = obj_loss(pred_obj_head, batch_sample_obj_heads)
-    obj_loss += b_focal_loss(pred_obj_head, batch_sample_obj_heads)
+    obj_loss = obj_loss(pred_obj_head, batch_sample_obj_heads) #
+    obj_loss += b_focal_loss(pred_obj_head, batch_sample_obj_heads)#
     obj_loss = (obj_loss * batch_text_mask).sum() / batch_text_mask.sum()
     loss += loss_weight[3] * obj_loss
     return loss, obj_hidden, last_hidden_size
@@ -297,7 +304,7 @@ def train_epoch(model, epoch, optimizer, scheduler, fgm, ema):
             model, batch,
             rel_loss, entity_head_loss, entity_tail_loss, obj_loss
         )
-        if epoch >= 0:
+        if epoch >= 1:
             if args.is_rdrop:
                 loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
                     model, batch,
@@ -312,7 +319,7 @@ def train_epoch(model, epoch, optimizer, scheduler, fgm, ema):
             # print(loss)
         losses.append(loss.item())
         loss.backward()
-        if epoch >= 0:
+        if epoch >= 1:
             ##对抗训练
             fgm.attack()
             loss_adv, _, _ = train_one(
@@ -531,7 +538,6 @@ for epoch in range(num_epochs):
     ema.register()
 
     if args.is_train:
-        # model.load_state_dict(torch.load(f"output/model_epoch16.bin"))
         train_epoch(model, epoch, optimizer, scheduler, fgm, ema)
         torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
     if args.is_valid:

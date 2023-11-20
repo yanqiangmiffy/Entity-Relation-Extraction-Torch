@@ -18,6 +18,7 @@ from transformers import get_linear_schedule_with_warmup
 from dataset import TDEERDataset, collate_fn, collate_fn_val
 from model4 import TDEER
 from utils.adv_utils import FGM, EMA
+from utils.entity_rel import get_entity_types
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
@@ -45,17 +46,17 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer",
+    parser.add_argument('--model_type', default="tdeer_exp4_webnlg_att_pool",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
-    parser.add_argument('--data_dir', type=str, default="data/NYT", help='定义数据集路径')
-    parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
-    parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
-    parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
+    parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
+    parser.add_argument('--lr', default=1e-5, type=float, help='specify the learning rate')
+    parser.add_argument('--bert_lr', default=1e-5, type=float, help='specify the learning rate for bert layer')
+    parser.add_argument('--other_lr', default=1e-4, type=float, help='specify the learning rate')
     parser.add_argument('--epoch', default=30, type=int, help='specify the epoch size')
-    parser.add_argument('--batch_size', default=64, type=int, help='specify the batch size')
+    parser.add_argument('--batch_size', default=16, type=int, help='specify the batch size')
     parser.add_argument('--output_path', default="event_extract", type=str, help='将每轮的验证结果保存的路径')
     parser.add_argument('--float16', default=False, type=bool, help='是否采用浮点16进行半精度计算')
     parser.add_argument('--grad_accumulations_steps', default=3, type=int, help='梯度累计步骤')
@@ -186,40 +187,6 @@ def compute_kl_loss(p, q, pad_mask=None):
     return loss
 
 
-rel_label_map = {
-    'ORG': {
-        "0": "/business/company/advisors",
-        "1": "/business/company/founders",
-        "2": "/business/company/industry",
-        "3": "/business/company/major_shareholders",
-        "4": "/business/company/place_founded",
-        "16": "/people/person/ethnicity",  #
-        "22": "/sports/sports_team/location",
-    },
-    'PER': {
-        "5": "/business/company_shareholder/major_shareholder_of",
-        "6": "/business/person/company",
-        "12": "/people/deceased_person/place_of_death",
-        "13": "/people/ethnicity/geographic_distribution",
-        "14": "/people/ethnicity/people",
-        "15": "/people/person/children",
-        "17": "/people/person/nationality",
-        "18": "/people/person/place_lived",
-        "19": "/people/person/place_of_birth",
-        "20": "/people/person/profession",
-        "21": "/people/person/religion",
-    },
-    'LOC': {
-        "7": "/location/administrative_division/country",
-        "8": "/location/country/administrative_divisions",
-        "9": "/location/country/capital",
-        "10": "/location/location/contains",
-        "11": "/location/neighborhood/neighborhood_of",
-        "23": "/sports/sports_team_location/teams"
-    }
-}
-
-
 def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_loss):
     batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_entity_heads, batch_entity_tails, batch_rels, \
         batch_sample_subj_head, batch_sample_subj_tail, batch_sample_rel, batch_sample_obj_heads, batch_triple_sets, batch_text_masks = batch
@@ -250,7 +217,8 @@ def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_lo
         loss = 0
         total_loss = 0
         for idx, pred_rel in enumerate(relations_logits_new):
-            # batch_rels = torch.mask(entity_types, 1)
+            entity_types = get_entity_types(pred_rel)
+            batch_rels = batch_rels.masked_fill(entity_types, 1)
             # print(pred_rel.size())
             # print(batch_rels.size())
             for entity_rel in pred_rel:
@@ -297,7 +265,7 @@ def train_epoch(model, epoch, optimizer, scheduler, fgm, ema):
             model, batch,
             rel_loss, entity_head_loss, entity_tail_loss, obj_loss
         )
-        if epoch >= 10:
+        if epoch >= 3:
             if args.is_rdrop:
                 loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
                     model, batch,
@@ -313,7 +281,7 @@ def train_epoch(model, epoch, optimizer, scheduler, fgm, ema):
         losses.append(loss.item())
         loss.backward()
 
-        if epoch >= 10:
+        if epoch >= 5:
             ##对抗训练
             fgm.attack()
             loss_adv, _, _ = train_one(
@@ -439,7 +407,7 @@ def validation_epoch_end(epoch, outputs):
     # log_dir = [log.log_dir for log in self.loggers if hasattr(log, "log_dir")][0]
     log_dir = '.'
     os.makedirs(os.path.join(log_dir, "output"), exist_ok=True)
-    writer = open(os.path.join(log_dir, "output", 'val_output_{}.json'.format(epoch)), 'w')
+    writer = open(os.path.join(log_dir, "output", 'val_output_{}.json'.format(epoch)), 'w', encoding='utf-8')
     for text, pred, target in zip(*(texts, preds, targets)):
         pred = set([tuple(l) for l in pred])
         target = set([tuple(l) for l in target])
@@ -494,6 +462,7 @@ def validation_epoch_end(epoch, outputs):
     print("rec", real_recall)
     print("acc", real_acc)
     print("f1", real_f1)
+    return real_f1
 
 
 def decode_entity(text: str, mapping, start: int, end: int):
@@ -520,21 +489,24 @@ def valid_epoch(model, epoch, ema):
         # print(len(epoch_pred_triple_sets))
         # print(len(epoch_triple_sets))
         outputs = (epoch_texts, epoch_pred_triple_sets, epoch_triple_sets)
-        validation_epoch_end(epoch, outputs)
+        f1 = validation_epoch_end(epoch, outputs)
+    return f1
 
 
 print(args.is_train)
+model.load_state_dict(torch.load(f"output/model_epoch29_f10.93338.bin"))
+f1 = 0
+fgm = FGM(model)
+ema = EMA(model, 0.999)
+ema.register()
+optimizer, scheduler = build_optimizer(args, model)
+
 for epoch in range(num_epochs):
-    optimizer, scheduler = build_optimizer(args, model)
-    fgm = FGM(model)
-
-    ema = EMA(model, 0.999)
-    ema.register()
-
     if args.is_train:
         train_epoch(model, epoch, optimizer, scheduler, fgm, ema)
-        torch.save(model.state_dict(), f"output/model_epoch{epoch}.bin")
     if args.is_valid:
-        model.load_state_dict(torch.load(f"output/model_epoch{epoch}.bin"))
-        valid_epoch(model, epoch, ema)
+        eval_f1 = valid_epoch(model, epoch, ema)
+        if eval_f1 > f1:
+            f1 = eval_f1
+            torch.save(model.state_dict(), f"output/model_epoch{epoch}_f1{f1}.bin")
         ema.restore()

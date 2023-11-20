@@ -32,7 +32,7 @@ class TDEERDataset(Dataset):
         self.datas = []
         if is_training:
             loguru.logger.info("stage for training dataset")
-            filenames = os.path.join(args.data_dir, "train_triples.json")
+            filenames = os.path.join(args.data_dir, "dev_triples.json")
         else:
             loguru.logger.info("stage for dev/test dataset")
             filenames = os.path.join(args.data_dir, "dev_triples.json")
