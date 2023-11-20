@@ -4,13 +4,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from transformers.models.bert.configuration_bert import BertConfig
-# from utils.Callback import FGM
 from transformers.models.bert.modeling_bert import BertSelfOutput, BertModel
-
 from utils.utils import rematch
 
-
-# import pytorch_lightning as pl
 
 
 class Linear(nn.Linear):

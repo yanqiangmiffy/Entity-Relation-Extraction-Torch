@@ -19,7 +19,6 @@ from model4 import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
-from utils.adv_utils import FGM,EMA
 os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 log_writer = SummaryWriter('./log')

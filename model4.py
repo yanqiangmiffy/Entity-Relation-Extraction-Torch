@@ -4,13 +4,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from transformers.models.bert.configuration_bert import BertConfig
-# from utils.Callback import FGM
 from transformers.models.bert.modeling_bert import BertSelfOutput, BertModel
 
 from utils.utils import rematch
-
-
-# import pytorch_lightning as pl
 
 
 class Linear(nn.Linear):
@@ -177,6 +173,7 @@ class RelEntityModel(nn.Module):
             nn.Linear(768, 1),
             nn.Softmax(dim=1)
         )
+
     def masked_avgpool(self, sent, mask):
         mask_ = mask.masked_fill(mask == 0, -1e9).float()
         score = torch.softmax(mask_, -1)
@@ -207,7 +204,7 @@ class RelEntityModel(nn.Module):
             hidden_last_R = hidden_last[-1]
             # print(hidden_last_R.shape)   #[32, 384]
             # 进行拼接
-            pooler_output = torch.cat([hidden_last_L, hidden_last_R], dim=-1) # 64x1536
+            pooler_output = torch.cat([hidden_last_L, hidden_last_R], dim=-1)  # 64x1536
             # loguru.logger.info(pooler_output.size)
         # elif self.args.second2last:
         #     pass
@@ -222,12 +219,13 @@ class RelEntityModel(nn.Module):
             # print(cls_outputs.size())# [12, 64, 96, 768]
             cls_output = (
                     torch.softmax(self.layer_weights, dim=0).unsqueeze(1).unsqueeze(1).unsqueeze(1) * cls_outputs).sum(
-                0)# 层间注意力
+                0)  # 层间注意力
             # print(cls_output.size())
 
             pooler_output = torch.mean(
                 torch.stack(
-                    [torch.sum(self.attention(self.high_dropout(cls_output)) * cls_output, dim=1) for _ in range(5)],# token注意力
+                    [torch.sum(self.attention(self.high_dropout(cls_output)) * cls_output, dim=1) for _ in range(5)],
+                    # token注意力
                     dim=0,
                 ),
                 dim=0,
@@ -242,8 +240,6 @@ class RelEntityModel(nn.Module):
         # print("pred_entity_heads.requires_grad",pred_entity_heads.requires_grad)
         # print("pred_entity_tails.requires_grad",pred_entity_tails.requires_grad)
 
-
-
         pred_rels_raw = self.keep_rels_out(pooler_output)
         #
         pred_rels = []
@@ -253,7 +249,7 @@ class RelEntityModel(nn.Module):
             # print(subjects)
             # print("pred_entity_heads.requires_grad", pred_entity_heads.requires_grad)
             # print("pred_entity_tails.requires_grad", pred_entity_tails.requires_grad)
-            for idx, sample_subjects in enumerate(subjects):# 64 batch_size
+            for idx, sample_subjects in enumerate(subjects):  # 64 batch_size
                 sample_rels = []
                 if len(sample_subjects) > 0:
                     for entity in sample_subjects:
@@ -273,7 +269,7 @@ class RelEntityModel(nn.Module):
                         entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
                         # print(entity_emb.size()) # 2304
 
-                        pred_rel = self.rels_out(entity_emb) # 1x24
+                        pred_rel = self.rels_out(entity_emb)  # 1x24
                         sample_rels.append(pred_rel)  # 24
 
                         # print(pred_rel.size())
@@ -285,7 +281,7 @@ class RelEntityModel(nn.Module):
                 # print(torch.concat(sample_rels, dim=0).size())
                 # print(torch.concat(sample_rels, dim=0).resize(len(sample_rels),24 ))
                 # print(torch.concat(sample_rels, dim=1).size())
-                #1 3个实体 3x24
+                # 1 3个实体 3x24
                 # 2 2个实体 2x24
                 # 3 1个实体 1x24
                 pred_rels.append(torch.concat(sample_rels, dim=0).resize(len(sample_rels), 24))
@@ -312,7 +308,7 @@ class RelEntityModel(nn.Module):
             # last_hidden_state = self.hidden_weight(all_hidden_states).squeeze(-1)
             last_hidden_state = all_hidden_states
 
-        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,pred_rels_raw
+        return pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output, pred_rels_raw
 
 
 class ObjModel(nn.Module):
@@ -430,7 +426,7 @@ class TDEER(nn.Module):
         Returns:
             _type_: _description_
         """
-        pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,pred_rels_raw = self.rel_entity_model(
+        pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output, pred_rels_raw = self.rel_entity_model(
             input_ids, attention_masks, token_type_ids, batch_offsets)
         pred_obj_head, obj_hidden = self.obj_model(relation, last_hidden_state, sub_head, sub_tail, attention_masks)
-        return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output,pred_rels_raw
+        return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output, pred_rels_raw
