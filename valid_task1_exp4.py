@@ -38,12 +38,12 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp4_att_pool",
+    parser.add_argument('--model_type', default="tdeer_exp4_webnlg_att_pool",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
-    parser.add_argument('--data_dir', type=str, default="data/NYT", help='定义数据集路径')
+    parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
     parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
     parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
     parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
@@ -428,7 +428,7 @@ def validation_epoch_end(epoch, outputs):
     # log_dir = [log.log_dir for log in self.loggers if hasattr(log, "log_dir")][0]
     log_dir = '.'
     os.makedirs(os.path.join(log_dir, "output"), exist_ok=True)
-    writer = open(os.path.join(log_dir, "output", 'val_output_{}.json'.format(epoch)), 'w')
+    writer = open(os.path.join(log_dir, "output", 'val_output_{}.json'.format(epoch)), 'w',encoding='utf-8')
     for text, pred, target in zip(*(texts, preds, targets)):
         pred = set([tuple(l) for l in pred])
         target = set([tuple(l) for l in target])
@@ -510,6 +510,6 @@ def valid_epoch(model, epoch):
 
 print(args.is_train)
 epoch=30
-model.load_state_dict(torch.load(f"output/exp4/NYT/att_pool/model_epoch1.bin",map_location="cpu"), strict=False)
+model.load_state_dict(torch.load(f"output/exp4/WebNLG/model_epoch29_f10.93338.bin",map_location="cpu"), strict=False)
 valid_epoch(model, epoch)
 
