@@ -52,9 +52,9 @@ def parser_args():
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
     parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
-    parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
-    parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
-    parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
+    parser.add_argument('--lr', default=1e-5, type=float, help='specify the learning rate')
+    parser.add_argument('--bert_lr', default=1e-5, type=float, help='specify the learning rate for bert layer')
+    parser.add_argument('--other_lr', default=1e-4, type=float, help='specify the learning rate')
     parser.add_argument('--epoch', default=20, type=int, help='specify the epoch size')
     parser.add_argument('--batch_size', default=16, type=int, help='specify the batch size')
     parser.add_argument('--output_path', default="event_extract", type=str, help='将每轮的验证结果保存的路径')
@@ -499,6 +499,8 @@ fgm = FGM(model)
 ema = EMA(model, 0.999)
 ema.register()
 optimizer, scheduler = build_optimizer(args, model)
+
+
 
 for epoch in range(num_epochs):
     if args.is_train:

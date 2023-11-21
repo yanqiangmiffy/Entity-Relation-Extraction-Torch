@@ -494,7 +494,6 @@ def valid_epoch(model, epoch, ema):
 
 
 print(args.is_train)
-model.load_state_dict(torch.load(f"output/model_epoch29_f10.93338.bin"))
 f1 = 0
 fgm = FGM(model)
 ema = EMA(model, 0.999)
