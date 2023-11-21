@@ -510,6 +510,7 @@ def valid_epoch(model, epoch):
 
 print(args.is_train)
 epoch=30
-model.load_state_dict(torch.load(f"output/exp4/WebNLG/model_epoch29_f10.93338.bin",map_location="cpu"), strict=False)
+print(args.weight_path)
+model.load_state_dict(torch.load(args.weight_path,map_location="cpu"))
 valid_epoch(model, epoch)
 

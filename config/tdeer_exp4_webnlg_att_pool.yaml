@@ -22,3 +22,7 @@ model_params:
   avg_pool: false
   lstm_pool: false
   att_pool: true
+  # 模型权重路径
+  weight_path: output/exp4/WebNLG/att_pool/model_epoch31_f10.9369.bin
+  # 数据集路径
+  data_dir: data/WebNLG

@@ -42,5 +42,7 @@ def update_arguments(args, config):
         if key in args:
             print(f"该参数{key}的原值为{value},新值为{args.__dict__[key]}")
             continue
+        else:
+            print(key,value)
         args.__setattr__(key, value)
     return args

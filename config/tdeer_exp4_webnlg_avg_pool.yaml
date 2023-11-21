@@ -13,17 +13,15 @@ model_params:
     - 2
     - 2
   # 是否使用R-drop训练策略
-  is_rdrop: true
+  is_rdrop: false
   # 是否使用bert所有hidden states融合策略
   hidden_fuse: false
   use_split: false
   # 融合倒数后几层的hidden states,最多12层
   hidden_fuse_layers: [8]
-  avg_pool: false
+  avg_pool: true
   lstm_pool: false
-  att_pool: true
+  att_pool: false
 
-  # 模型权重路径
-  weight_path: output/exp4/NYT/att_pool/model_epoch30_f10.94415.bin
   # 数据集路径
-  data_dir: data/NYT
+  data_dir: data/WebNLG
