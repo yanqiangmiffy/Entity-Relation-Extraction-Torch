@@ -38,12 +38,12 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp4_webnlg_att_pool",
+    parser.add_argument('--model_type', default="tdeer_exp4_nyt_lastfour",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
-    parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
+    # parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
     parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
     parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
     parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')

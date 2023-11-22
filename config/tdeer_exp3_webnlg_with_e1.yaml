@@ -19,12 +19,11 @@ model_params:
   use_split: false
   # 融合倒数后几层的hidden states,最多12层
   hidden_fuse_layers: [8]
-  avg_pool: true
-  lstm_pool: false
+  avg_pool: false
+  lstm_pool: true
   att_pool: false
-  second2last: false
-  lastfour: false
+
   # 模型权重路径
-  weight_path: output/exp4/WebNLG/avg/model_epoch1_f10.93101.bin
+  weight_path: output/exp3/WebNLG/model_epoch31_f10.93472.bin
   # 数据集路径
   data_dir: data/WebNLG

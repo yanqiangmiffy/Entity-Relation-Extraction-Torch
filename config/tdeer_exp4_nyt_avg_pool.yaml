@@ -25,6 +25,6 @@ model_params:
   second2last: false
   lastfour: false
   # 模型权重路径
-  weight_path: output/exp4/WebNLG/avg/model_epoch1_f10.93101.bin
+  weight_path: output/exp4/NYT/avg/model_epoch19_f10.9418.bin
   # 数据集路径
-  data_dir: data/WebNLG
+  data_dir: data/NYT

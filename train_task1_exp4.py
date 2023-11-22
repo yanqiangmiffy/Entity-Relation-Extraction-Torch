@@ -46,17 +46,17 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp4_webnlg_avg_pool",
+    parser.add_argument('--model_type', default="tdeer_exp4_nyt_lastfour",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
-    parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
-    parser.add_argument('--lr', default=1e-5, type=float, help='specify the learning rate')
-    parser.add_argument('--bert_lr', default=1e-5, type=float, help='specify the learning rate for bert layer')
-    parser.add_argument('--other_lr', default=1e-4, type=float, help='specify the learning rate')
-    parser.add_argument('--epoch', default=30, type=int, help='specify the epoch size')
-    parser.add_argument('--batch_size', default=16, type=int, help='specify the batch size')
+    # parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
+    parser.add_argument('--lr', default=2e-5, type=float, help='specify the learning rate')
+    parser.add_argument('--bert_lr', default=2e-5, type=float, help='specify the learning rate for bert layer')
+    parser.add_argument('--other_lr', default=2e-4, type=float, help='specify the learning rate')
+    parser.add_argument('--epoch', default=20, type=int, help='specify the epoch size')
+    parser.add_argument('--batch_size', default=32, type=int, help='specify the batch size')
     parser.add_argument('--output_path', default="event_extract", type=str, help='将每轮的验证结果保存的路径')
     parser.add_argument('--float16', default=False, type=bool, help='是否采用浮点16进行半精度计算')
     parser.add_argument('--grad_accumulations_steps', default=3, type=int, help='梯度累计步骤')
@@ -85,6 +85,7 @@ def parser_args():
 
 args = parser_args()
 print(args)
+print(args.data_dir)
 
 # ======================================
 # dataset:load dataset
@@ -491,7 +492,8 @@ def valid_epoch(model, epoch, ema):
         outputs = (epoch_texts, epoch_pred_triple_sets, epoch_triple_sets)
         f1 = validation_epoch_end(epoch, outputs)
     return f1
-
+# output/model_epoch16_f10.92049.bin
+# model.load_state_dict(torch.load("output/model_epoch15_f10.91894.bin",map_location="cpu"))
 
 print(args.is_train)
 f1 = 0

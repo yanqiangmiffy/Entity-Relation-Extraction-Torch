@@ -157,7 +157,11 @@ class RelEntityModel(nn.Module):
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
         # self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
         self.rels_out = nn.Linear(1536, relation_size)  # 关系预测
-        self.keep_rels_out = nn.Linear(hidden_size, relation_size)  # 关系预测
+
+        if self.args.lastfour:
+            self.keep_rels_out = nn.Linear(hidden_size*4, relation_size)  # 关系预测
+        else:
+            self.keep_rels_out = nn.Linear(hidden_size, relation_size)  # 关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
         self.dropout = nn.Dropout(p=0.2)
         self.high_dropout = nn.Dropout(p=0.5)
@@ -206,10 +210,16 @@ class RelEntityModel(nn.Module):
             # 进行拼接
             pooler_output = torch.cat([hidden_last_L, hidden_last_R], dim=-1)  # 64x1536
             # loguru.logger.info(pooler_output.size)
-        # elif self.args.second2last:
-        #     pass
-        # elif self.args.lastfour:
-        #     pass
+        elif self.args.second2last:
+            all_hidden_states = torch.stack(bert_output[2])
+            second_to_last_layer = 11
+            pooler_output = all_hidden_states[second_to_last_layer, :, 0]
+        elif self.args.lastfour:
+            all_hidden_states = torch.stack(bert_output[2])
+            concatenate_pooling = torch.cat(
+                (all_hidden_states[-1], all_hidden_states[-2], all_hidden_states[-3], all_hidden_states[-4]), -1
+            )
+            pooler_output = concatenate_pooling[:, 0]
         elif self.args.att_pool:
             cls_outputs = torch.stack(
                 [self.dropout(layer) for layer in all_hidden_size[-12:]], dim=0
