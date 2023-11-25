@@ -22,7 +22,8 @@ model_params:
   avg_pool: false
   lstm_pool: false
   att_pool: true
-
+  second2last: false
+  lastfour: false
   # 模型权重路径
   weight_path: output/exp4/NYT/att_pool/model_epoch30_f10.94415.bin
   # 数据集路径

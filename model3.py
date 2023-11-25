@@ -218,7 +218,6 @@ class RelEntityModel(nn.Module):
                         head, tail = entity
                         head_token_enmbedding = last_hidden_state[idx][head]
                         tail_token_enmbedding = last_hidden_state[idx][tail]
-                        entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
 
                         # print(head_token_enmbedding.size()) # 64, 81, 768
                         # print(tail_token_enmbedding.size()) # 64, 81, 768
@@ -226,8 +225,10 @@ class RelEntityModel(nn.Module):
 
                         # print(entity_emb.size()) # 768
                         # print(pooler_output[idx].size()) # 1536
-
-                        entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
+                        if self.args.with_e1:
+                            entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
+                        else:
+                            entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
                         # print(entity_emb.size()) # 2304
 
                         pred_rel = self.rels_out(entity_emb) # 1x24

@@ -46,12 +46,12 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp3_webnlg",
+    parser.add_argument('--model_type', default="tdeer_exp3_webnlg_with_e1",
                         type=str, help='定义模型类型', choices=['tdeer'])
-    # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
+    # parser.add_argument('--pretrain_path', type=str, default="luyaojie                                `   /uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
-    parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
+    # parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
     parser.add_argument('--lr', default=1e-5, type=float, help='specify the learning rate')
     parser.add_argument('--bert_lr', default=1e-5, type=float, help='specify the learning rate for bert layer')
     parser.add_argument('--other_lr', default=1e-4, type=float, help='specify the learning rate')
@@ -119,7 +119,7 @@ obj_loss = nn.BCEWithLogitsLoss(reduction="none")
 focal_loss = MLFocalLoss()
 b_focal_loss = BCEFocalLoss(alpha=0.25, gamma=2)
 threshold = 0.5
-num_epochs = 30
+num_epochs = 10
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 args = args
 loss_weight = args.loss_weight
@@ -492,6 +492,7 @@ def valid_epoch(model, epoch, ema):
         f1 = validation_epoch_end(epoch, outputs)
     return f1
 
+model.load_state_dict(torch.load("output/model_epoch1_f10.9324.bin",map_location="cpu"))
 
 print(args.is_train)
 f1 = 0
