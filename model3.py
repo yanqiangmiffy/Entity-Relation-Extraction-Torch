@@ -156,8 +156,10 @@ class RelEntityModel(nn.Module):
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
         # self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
-        self.rels_out = nn.Linear(2304, relation_size)  # 新的关系预测
+        # self.rels_out = nn.Linear(2304, relation_size)  # 新的关系预测
+        self.rels_out = nn.Linear(768, relation_size)  # 新的关系预测
         self.keep_rels_out = nn.Linear(hidden_size * 2, relation_size)  # 原始论文的关系预测
+        # self.keep_rels_out = nn.Linear(hidden_size, relation_size)  # 原始论文的关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
 
     def masked_avgpool(self, sent, mask):
@@ -228,7 +230,7 @@ class RelEntityModel(nn.Module):
                         if self.args.with_e1:
                             entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
                         else:
-                            entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
+                            entity_emb = torch.cat([entity_emb, pooler_output], dim=0)
                         # print(entity_emb.size()) # 2304
 
                         pred_rel = self.rels_out(entity_emb) # 1x24
@@ -286,7 +288,8 @@ class ObjModel(nn.Module):
         self.attention = Attention(config)
         self.obj_head = nn.Linear(hidden_size, 1)
         self.words_dropout = SpatialDropout(0.1)
-        self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size * 2)
+        # self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size * 2)
+        self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size)
         self.hidden_size = hidden_size
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.rel_sub_fuse = nn.Linear(hidden_size, hidden_size)
@@ -329,6 +332,9 @@ class ObjModel(nn.Module):
         # feature = rel_feature+sub_feature
         # 将关系表征，subject表征进行线性变换
         feature = torch.cat([rel_feature, sub_feature], dim=-1)
+        # feature = torch.cat([rel_feature,lstm_feature, sub_feature], dim=-1)
+        # feature = rel_feature
+        # print(feature.size())
         # feature = self.relu(self.rel_sub_fuse(feature))
         # feature = self.rel_sub_fuse(feature)
 

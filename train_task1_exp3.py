@@ -46,7 +46,7 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp3_webnlg_with_e1",
+    parser.add_argument('--model_type', default="tdeer_exp3_webnlg",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie                                `   /uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
@@ -492,7 +492,6 @@ def valid_epoch(model, epoch, ema):
         f1 = validation_epoch_end(epoch, outputs)
     return f1
 
-model.load_state_dict(torch.load("output/model_epoch1_f10.9324.bin",map_location="cpu"))
 
 print(args.is_train)
 f1 = 0
