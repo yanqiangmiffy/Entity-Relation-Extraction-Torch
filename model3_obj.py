@@ -156,8 +156,10 @@ class RelEntityModel(nn.Module):
         self.entity_heads_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的头部位置
         self.entity_tails_out = nn.Linear(hidden_size, 2)  # 预测subjects,objects的尾部位置
         # self.rels_out = nn.Linear(hidden_size * 2, relation_size)  # 关系预测
-        self.rels_out = nn.Linear(2304, relation_size)  # 新的关系预测
+        # self.rels_out = nn.Linear(2304, relation_size)  # 新的关系预测
+        self.rels_out = nn.Linear(768, relation_size)  # 新的关系预测
         self.keep_rels_out = nn.Linear(hidden_size * 2, relation_size)  # 原始论文的关系预测
+        # self.keep_rels_out = nn.Linear(hidden_size, relation_size)  # 原始论文的关系预测
         self.birnn = nn.LSTM(hidden_size, hidden_size, num_layers=1, bidirectional=True, batch_first=True)
 
     def masked_avgpool(self, sent, mask):
@@ -218,7 +220,6 @@ class RelEntityModel(nn.Module):
                         head, tail = entity
                         head_token_enmbedding = last_hidden_state[idx][head]
                         tail_token_enmbedding = last_hidden_state[idx][tail]
-                        entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
 
                         # print(head_token_enmbedding.size()) # 64, 81, 768
                         # print(tail_token_enmbedding.size()) # 64, 81, 768
@@ -226,8 +227,10 @@ class RelEntityModel(nn.Module):
 
                         # print(entity_emb.size()) # 768
                         # print(pooler_output[idx].size()) # 1536
-
-                        entity_emb = torch.cat([entity_emb, pooler_output[idx]], dim=0)
+                        if self.args.with_e1:
+                            entity_emb = (head_token_enmbedding + tail_token_enmbedding) / 2
+                        else:
+                            entity_emb = torch.cat([entity_emb, pooler_output], dim=0)
                         # print(entity_emb.size()) # 2304
 
                         pred_rel = self.rels_out(entity_emb) # 1x24
@@ -285,13 +288,14 @@ class ObjModel(nn.Module):
         self.attention = Attention(config)
         self.obj_head = nn.Linear(hidden_size, 1)
         self.words_dropout = SpatialDropout(0.1)
-        self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size * 2)
+        # self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size * 2)
+        self.conditionlayernormal = ConditionalLayerNorm(hidden_size, hidden_size*4)
         self.hidden_size = hidden_size
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.rel_sub_fuse = nn.Linear(hidden_size, hidden_size)
         self.relation_embedding = nn.Embedding(relation_size, hidden_size)
 
-    def forward(self, relation, last_hidden_size, sub_head, sub_tail, attention_mask):
+    def forward(self, relation, last_hidden_size, sub_head, sub_tail, attention_mask,pooler_output):
         """_summary_
         Args:
             relation (_type_): [batch_size,1] or [batch_size, rel_num]
@@ -327,11 +331,26 @@ class ObjModel(nn.Module):
             sub_feature = sub_feature.transpose(1, 0)
         # feature = rel_feature+sub_feature
         # 将关系表征，subject表征进行线性变换
-        feature = torch.cat([rel_feature, sub_feature], dim=-1)
+        # print(rel_feature.size())
+        # print(pooler_output.size())
+        # print(sub_feature.size())
+        # print(pooler_output.unsqueeze(1).size())
+        try:
+            feature = torch.cat([rel_feature, pooler_output.unsqueeze(1),sub_feature], dim=-1)
+        except:
+            # print(sub_feature.size())
+            # print(rel_feature.size())
+            # print(pooler_output.unsqueeze(0).size())
+            feature = torch.cat([rel_feature, pooler_output.unsqueeze(0),sub_feature], dim=-1)
+        # feature = torch.cat([rel_feature,lstm_feature, sub_feature], dim=-1)
+        # feature = rel_feature
+        # print(feature.size())
         # feature = self.relu(self.rel_sub_fuse(feature))
         # feature = self.rel_sub_fuse(feature)
 
         # [batch_size,seq_len,hidden_size]
+        # print(last_hidden_size.size())# 768
+        # print(feature.size())# 3072
         hidden_size = self.conditionlayernormal(last_hidden_size, feature)
         # [batch_size,seq_len,hidden_size]
         obj_feature = hidden_size
@@ -380,19 +399,6 @@ class TDEER(nn.Module):
         Args:
             input_ids (_type_): [batch_size,seq_len]
             attention_masks (_type_): [batch_size,seq_len]
-            token_type_ids (_type_): [batch_size,seq_len]
-            relation (_type_, optional): [batch_size,1]. Defaults to None. subject 对应的关系(可以是正样本,也可也是负样本关系)
-            sub_head (_type_, optional): [batch_size,1]. Defaults to None. subject 的head. 主要是为了预测object.如果是负样本关系,则预测不出object.
-            sub_tail (_type_, optional): [batch_size,1]. Defaults to None. subject 的tail. 主要是为了预测object.如果是负样本关系,则预测不出object.
-        Returns:
-            _type_: _description_
-        """
-        pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,pred_rels_raw = self.rel_entity_model(
-            input_ids, attention_masks, token_type_ids, batch_offsets)
-        pred_obj_head, obj_hidden = self.obj_model(relation, last_hidden_state, sub_head, sub_tail, attention_masks)
-        return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output,pred_rels_raw
-
-
             token_type_ids (_type_): [batch_size,seq_len]
             relation (_type_, optional): [batch_size,1]. Defaults to None. subject 对应的关系(可以是正样本,也可也是负样本关系)
             sub_head (_type_, optional): [batch_size,1]. Defaults to None. subject 的head. 主要是为了预测object.如果是负样本关系,则预测不出object.

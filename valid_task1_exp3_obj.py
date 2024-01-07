@@ -15,7 +15,7 @@ from transformers import AdamW
 from transformers import get_linear_schedule_with_warmup
 
 from dataset import TDEERDataset, collate_fn, collate_fn_val
-from model4 import TDEER
+from model3_obj import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
@@ -38,9 +38,8 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp4_nyt_second2last",
+    parser.add_argument('--model_type', default="tdeer_exp3_webnlg_obj",
                         type=str, help='定义模型类型', choices=['tdeer'])
-    # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
                         help='定义预训练模型路径')
     # parser.add_argument('--data_dir', type=str, default="data/WebNLG", help='定义数据集路径')
@@ -76,7 +75,6 @@ def parser_args():
 
 
 args = parser_args()
-print(args)
 
 # ======================================
 # dataset:load dataset
@@ -178,147 +176,8 @@ def compute_kl_loss(p, q, pad_mask=None):
     loss = (p_loss + q_loss) / 2
     return loss
 
-rel_label_map = {
-    'ORG': {
-        "0": "/business/company/advisors",
-        "1": "/business/company/founders",
-        "2": "/business/company/industry",
-        "3": "/business/company/major_shareholders",
-        "4": "/business/company/place_founded",
-        "16": "/people/person/ethnicity",  #
-        "22": "/sports/sports_team/location",
-    },
-    'PER': {
-        "5": "/business/company_shareholder/major_shareholder_of",
-        "6": "/business/person/company",
-        "12": "/people/deceased_person/place_of_death",
-        "13": "/people/ethnicity/geographic_distribution",
-        "14": "/people/ethnicity/people",
-        "15": "/people/person/children",
-        "17": "/people/person/nationality",
-        "18": "/people/person/place_lived",
-        "19": "/people/person/place_of_birth",
-        "20": "/people/person/profession",
-        "21": "/people/person/religion",
-    },
-    'LOC': {
-        "7": "/location/administrative_division/country",
-        "8": "/location/country/administrative_divisions",
-        "9": "/location/country/capital",
-        "10": "/location/location/contains",
-        "11": "/location/neighborhood/neighborhood_of",
-        "23": "/sports/sports_team_location/teams"
-    }
-}
-
-def train_one(model, batch, rel_loss, entity_head_loss, entity_tail_loss, obj_loss):
-    batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_entity_heads, batch_entity_tails, batch_rels, \
-        batch_sample_subj_head, batch_sample_subj_tail, batch_sample_rel, batch_sample_obj_heads, batch_triple_sets, batch_text_masks = batch
-
-    batch_tokens = batch_tokens.to(device)
-    batch_attention_masks = batch_attention_masks.to(device)
-    batch_segments = batch_segments.to(device)
-    batch_entity_heads = batch_entity_heads.to(device)
-    batch_entity_tails = batch_entity_tails.to(device)
-    batch_rels = batch_rels.to(device)
-    batch_sample_subj_head = batch_sample_subj_head.to(device)
-    batch_sample_subj_tail = batch_sample_subj_tail.to(device)
-    batch_sample_rel = batch_sample_rel.to(device)
-    batch_sample_obj_heads = batch_sample_obj_heads.to(device)
-    batch_text_masks = batch_text_masks.to(device)
-
-    output = model(
-        batch_tokens, batch_attention_masks, batch_segments,
-        relation=batch_sample_rel, sub_head=batch_sample_subj_head,
-        sub_tail=batch_sample_subj_tail,
-        batch_offsets=batch_offsets
-    )
-
-    relations_logits_new, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, last_hidden_size,relations_logits_raw  = output
-
-    loss = 0
-    rel_loss = rel_loss(relations_logits_raw, batch_rels)
-    rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    loss += loss_weight[0] * rel_loss
-
-    # loss = 0
-    # total_loss = 0
-    # for idx,pred_rel in enumerate(relations_logits_new):
-    #     # batch_rels = torch.mask(entity_types, 1)
-    #     # print(pred_rel.size())
-    #     # print(batch_rels.size())
-    #     for entity_rel in pred_rel:
-    #         total_loss += rel_loss(entity_rel, batch_rels[idx])
-    # print(pred_rels)
-    #
-    # rel_loss += focal_loss(relations_logits_raw, batch_rels)
-    # loss += loss_weight[0] * total_loss
-
-    batch_text_mask = batch_text_masks.reshape(-1, 1)
-
-    pred_entity_heads = pred_entity_heads.reshape(-1, 2)
-    batch_entity_heads = batch_entity_heads.reshape(-1, 2)
-    entity_head_loss = entity_head_loss(pred_entity_heads, batch_entity_heads)
-    entity_head_loss = (entity_head_loss * batch_text_mask).sum() / batch_text_mask.sum()
-    loss += loss_weight[1] * entity_head_loss
-
-    pred_entity_tails = pred_entity_tails.reshape(-1, 2)
-    batch_entity_tails = batch_entity_tails.reshape(-1, 2)
-    entity_tail_loss = entity_tail_loss(pred_entity_tails, batch_entity_tails)
-    entity_tail_loss = (entity_tail_loss * batch_text_mask).sum() / batch_text_mask.sum()
-    loss += loss_weight[2] * entity_tail_loss
-
-    pred_obj_head = pred_obj_head.reshape(-1, 1)
-    batch_sample_obj_heads = batch_sample_obj_heads.reshape(-1, 1)
-    obj_loss = obj_loss(pred_obj_head, batch_sample_obj_heads)
-    obj_loss += b_focal_loss(pred_obj_head, batch_sample_obj_heads)
-    obj_loss = (obj_loss * batch_text_mask).sum() / batch_text_mask.sum()
-    loss += loss_weight[3] * obj_loss
-    return loss, obj_hidden, last_hidden_size
 
 
-def train_epoch(model, epoch, optimizer, scheduler,fgm,ema):
-    model.train()
-    loguru.logger.info(f"training at {epoch}")
-    losses = []
-    tqdm_bar = tqdm(train_dataloader, total=len(train_dataloader), desc=f"training epoch:\t {epoch}")
-    for batch in tqdm_bar:
-        loss, obj_hidden, last_hidden_size = train_one(
-            model, batch,
-            rel_loss, entity_head_loss, entity_tail_loss, obj_loss
-        )
-        if epoch>=3:
-            if args.is_rdrop:
-                loss_2, obj_hidden_2, last_hidden_size_2 = train_one(
-                    model, batch,
-                    rel_loss, entity_head_loss, entity_tail_loss, obj_loss
-                )
-                loss = (loss + loss_2) / 2
-                # obj_kl_loss = compute_kl_loss(obj_hidden,obj_hidden_2)
-                hidden_size_kl_loss = compute_kl_loss(last_hidden_size, last_hidden_size_2)
-                kl_loss = hidden_size_kl_loss
-                loss = loss + 5 * kl_loss
-
-            # print(loss)
-        losses.append(loss.item())
-        loss.backward()
-
-        if epoch>=10:
-            ##对抗训练
-            fgm.attack()
-            loss_adv, _,_ = train_one(
-                model, batch,
-                rel_loss, entity_head_loss, entity_tail_loss, obj_loss
-            )
-            loss_adv.backward()
-            fgm.restore()
-
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-        optimizer.step()
-        scheduler.step()
-        optimizer.zero_grad()
-        tqdm_bar.set_postfix_str(f'loss: {loss.item():.4f}')
-        ema.update()
 
 def validation_step(model, batch):
     batch_texts, batch_offsets, batch_tokens, batch_attention_masks, batch_segments, batch_triple_sets, batch_triples_index_set, batch_text_masks = batch
@@ -328,8 +187,8 @@ def validation_step(model, batch):
     batch_segments = batch_segments.to(device)
     batch_text_masks = batch_text_masks.to(device)
 
-    relations_logits_new, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output,relations_logits_raw = model.rel_entity_model(
-        batch_tokens, batch_attention_masks, batch_segments,batch_offsets)
+    relations_logits_new, entity_heads_logits, entity_tails_logits, last_hidden_state, pooler_output, relations_logits_raw = model.rel_entity_model(
+        batch_tokens, batch_attention_masks, batch_segments, batch_offsets)
 
     entity_heads_logits = torch.sigmoid(entity_heads_logits)
     entity_tails_logits = torch.sigmoid(entity_tails_logits)
@@ -372,6 +231,7 @@ def validation_step(model, batch):
             if relations:
                 batch_sub_heads = []
                 batch_sub_tails = []
+                batch_sub_pools = []
                 batch_rels = []
                 batch_sub_entities = []
                 batch_rel_types = []
@@ -382,19 +242,34 @@ def validation_step(model, batch):
                         batch_rels.append([rel])
                         batch_sub_entities.append(sub)
                         batch_rel_types.append(id2rel[str(rel)])
+                        batch_sub_pools.append(pooler_output[index].resize(1,1536))
+
                 batch_sub_heads = torch.tensor(
                     batch_sub_heads, dtype=torch.long, device=last_hidden_state.device)
                 batch_sub_tails = torch.tensor(
                     batch_sub_tails, dtype=torch.long, device=last_hidden_state.device)
                 batch_rels = torch.tensor(
                     batch_rels, dtype=torch.long, device=last_hidden_state.device)
+
+                # print(batch_sub_heads.size())
+                # print(batch_sub_tails.size())
+
+                if len(batch_sub_pools)>1:
+                    # print(len(batch_sub_pools))
+                    batch_sub_pools = torch.concat(batch_sub_pools)
+                else:
+                    batch_sub_pools=pooler_output[index].resize(1,1536)
+
+
+
                 hidden = last_hidden_state[index].unsqueeze(0)
                 attention_mask = batch_attention_masks[index].unsqueeze(0)
                 batch_sub_heads = batch_sub_heads.transpose(1, 0)
                 batch_sub_tails = batch_sub_tails.transpose(1, 0)
                 batch_rels = batch_rels.transpose(1, 0)
+
                 obj_head_logits, _ = model.obj_model(
-                    batch_rels, hidden, batch_sub_heads, batch_sub_tails, attention_mask)
+                    batch_rels, hidden, batch_sub_heads, batch_sub_tails, attention_mask,batch_sub_pools)
                 obj_head_logits = torch.sigmoid(obj_head_logits)
                 obj_head_logits = obj_head_logits.cpu().numpy()
                 text_attention_mask = text_attention_mask.reshape(1, -1)
@@ -409,7 +284,6 @@ def validation_step(model, batch):
     # print(len(pred_triple_sets))
     # print(len(batch_triple_sets))
     return batch_texts, pred_triple_sets, batch_triple_sets
-
 
 def validation_epoch_end(epoch, outputs):
     preds, targets = [], []
@@ -504,13 +378,15 @@ def valid_epoch(model, epoch):
             epoch_texts.extend(batch_texts)
             epoch_pred_triple_sets.extend(pred_triple_sets)
             epoch_triple_sets.extend(batch_triple_sets)
+        # print(len(epoch_texts))
+        # print(len(epoch_pred_triple_sets))
+        # print(len(epoch_triple_sets))
         outputs = (epoch_texts, epoch_pred_triple_sets, epoch_triple_sets)
         validation_epoch_end(epoch, outputs)
 
 
 print(args.is_train)
-epoch=30
+epoch=19
 print(args.weight_path)
 model.load_state_dict(torch.load(args.weight_path,map_location="cpu"))
 valid_epoch(model, epoch)
-
