@@ -22,8 +22,10 @@ model_params:
   avg_pool: false
   lstm_pool: true
   att_pool: false
+  second2last: false
+  lastfour: false
 
   # 模型权重路径
-  weight_path: output/exp3/NYT/withlstm/model_epoch5_f10.93142.bin
+  weight_path: output/exp3/WebNLG/withlstm/model_epoch8_f10.89842.bin
   # 数据集路径
-  data_dir: data/NYT
+  data_dir: data/WebNLG
