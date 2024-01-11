@@ -230,7 +230,6 @@ class RelEntityModel(nn.Module):
             cls_output = (
                     torch.softmax(self.layer_weights, dim=0).unsqueeze(1).unsqueeze(1).unsqueeze(1) * cls_outputs).sum(
                 0)  # 层间注意力
-            # print(cls_output.size())
 
             pooler_output = torch.mean(
                 torch.stack(

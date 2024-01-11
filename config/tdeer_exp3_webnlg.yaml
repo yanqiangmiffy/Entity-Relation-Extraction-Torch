@@ -22,6 +22,8 @@ model_params:
   avg_pool: false
   lstm_pool: true
   att_pool: false
+  second2last: false
+  lastfour: false
 
   # 模型权重路径
   weight_path: output/exp3/WebNLG/model_epoch31_f10.93472.bin

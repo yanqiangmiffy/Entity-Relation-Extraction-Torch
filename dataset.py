@@ -35,7 +35,15 @@ class TDEERDataset(Dataset):
             filenames = os.path.join(args.data_dir, "train_triples.json")
         else:
             loguru.logger.info("stage for dev/test dataset")
-            filenames = os.path.join(args.data_dir, "dev_triples.json")
+            try:
+                if args.num_triples:
+                    filenames = os.path.join(args.data_dir, f"dev_triples_N{args.num_triples}.json")
+                else:
+                    filenames = os.path.join(args.data_dir, "dev_triples.json")
+            except Exception as e:
+                filenames = os.path.join(args.data_dir, "dev_triples.json")
+            loguru.logger.info(filenames)
+
         with open(filenames, 'r',encoding='utf-8') as f:
             lines = json.load(f)
             loguru.logger.info(f"dataset size is {len(lines)}")

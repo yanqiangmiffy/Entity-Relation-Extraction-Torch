@@ -20,13 +20,12 @@ model_params:
   # 融合倒数后几层的hidden states,最多12层
   hidden_fuse_layers: [8]
   avg_pool: false
-  lstm_pool: true
+  lstm_pool: false
   att_pool: false
-
   second2last: false
   lastfour: false
   with_e1: true
   # 模型权重路径
-  weight_path: output/exp3/NYT/model_epoch19_f10.93252.bin
+  weight_path: output/exp3/NYT/withe1/model_epoch35_f10.93801.bin
   # 数据集路径
   data_dir: data/NYT

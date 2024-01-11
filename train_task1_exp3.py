@@ -46,7 +46,7 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp3_nyt_obj",
+    parser.add_argument('--model_type', default="tdeer_exp3_nyt",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie                                `   /uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
@@ -389,7 +389,7 @@ def validation_step(model, batch):
                 batch_rels = batch_rels.transpose(1, 0)
 
                 obj_head_logits, _ = model.obj_model(
-                    batch_rels, hidden, batch_sub_heads, batch_sub_tails, attention_mask,batch_sub_pools)
+                    batch_rels, hidden, batch_sub_heads, batch_sub_tails, attention_mask)
                 obj_head_logits = torch.sigmoid(obj_head_logits)
                 obj_head_logits = obj_head_logits.cpu().numpy()
                 text_attention_mask = text_attention_mask.reshape(1, -1)

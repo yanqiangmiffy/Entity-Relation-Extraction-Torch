@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import random
+
 import loguru
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ from model4 import TDEER
 from utils.loss_func import MLFocalLoss, BCEFocalLoss
 from utils.utils import rematch
 from utils.utils import update_arguments
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '7'
 
 log_writer = SummaryWriter('./log')
@@ -38,7 +40,7 @@ seed_torch(42)
 
 def parser_args():
     parser = argparse.ArgumentParser(description='各个模型公共参数')
-    parser.add_argument('--model_type', default="tdeer_exp4_nyt_second2last",
+    parser.add_argument('--model_type', default="tdeer_exp4_webnlg_att_pool",
                         type=str, help='定义模型类型', choices=['tdeer'])
     # parser.add_argument('--pretrain_path', type=str, default="luyaojie/uie-base-en", help='定义预训练模型路径')
     parser.add_argument('--pretrain_path', type=str, default="pretrained_models/bert-base-uncased",
@@ -511,6 +513,6 @@ def valid_epoch(model, epoch):
 print(args.is_train)
 epoch=30
 print(args.weight_path)
-model.load_state_dict(torch.load(args.weight_path,map_location="cpu"))
+model.load_state_dict(torch.load(args.weight_path,map_location="cpu"),strict=False)
 valid_epoch(model, epoch)
 

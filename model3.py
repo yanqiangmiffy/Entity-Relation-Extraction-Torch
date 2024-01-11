@@ -391,16 +391,3 @@ class TDEER(nn.Module):
             input_ids, attention_masks, token_type_ids, batch_offsets)
         pred_obj_head, obj_hidden = self.obj_model(relation, last_hidden_state, sub_head, sub_tail, attention_masks)
         return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output,pred_rels_raw
-
-
-            token_type_ids (_type_): [batch_size,seq_len]
-            relation (_type_, optional): [batch_size,1]. Defaults to None. subject 对应的关系(可以是正样本,也可也是负样本关系)
-            sub_head (_type_, optional): [batch_size,1]. Defaults to None. subject 的head. 主要是为了预测object.如果是负样本关系,则预测不出object.
-            sub_tail (_type_, optional): [batch_size,1]. Defaults to None. subject 的tail. 主要是为了预测object.如果是负样本关系,则预测不出object.
-        Returns:
-            _type_: _description_
-        """
-        pred_rels, pred_entity_heads, pred_entity_tails, last_hidden_state, pooler_output,pred_rels_raw = self.rel_entity_model(
-            input_ids, attention_masks, token_type_ids, batch_offsets)
-        pred_obj_head, obj_hidden = self.obj_model(relation, last_hidden_state, sub_head, sub_tail, attention_masks,pooler_output)
-        return pred_rels, pred_entity_heads, pred_entity_tails, pred_obj_head, obj_hidden, pooler_output,pred_rels_raw
